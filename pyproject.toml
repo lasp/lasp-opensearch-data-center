@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "lasp_opensearch_data_center"
+version = "0.1.0"
+description = "Construct library for creating a CSV ingest pipeline into OpenSearch with a front end website."
+authors = [
+    "Gavin Medley <gavin.medley@lasp.colorado.edu>",
+]
+maintainers = [
+    "Gavin Medley <gavin.medley@lasp.colorado.edu>",
+]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.13"
+aws-cdk-lib = "^2.0.0"
+constructs = "^10.0.0"
+
+[tool.poetry.group.dev.dependencies]
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
