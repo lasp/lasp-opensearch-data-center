@@ -15,7 +15,7 @@ from aws_cdk import (
 )
 
 
-class BackendStorageConstruct(Construct):
+class BackendStorage(Construct):
     """Stack containing resources used during ingest processing"""
 
     def __init__(
@@ -23,7 +23,6 @@ class BackendStorageConstruct(Construct):
         scope: Construct,
         construct_id: str,
         account_type: str,
-        environment: Environment,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id)
