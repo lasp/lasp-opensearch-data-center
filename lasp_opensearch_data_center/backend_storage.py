@@ -6,7 +6,6 @@ from pathlib import Path
 from constructs import Construct
 from aws_cdk import (
     Environment,
-    Construct,
     RemovalPolicy,
     aws_s3 as s3,
     aws_sqs as sqs,
@@ -22,7 +21,9 @@ class BackendStorage(Construct):
         self,
         scope: Construct,
         construct_id: str,
-        account_type: str,
+        dropbox_bucket_name: str,
+	ingest_bucket_name: str,
+	opensearch_snapshot_bucket_name: str,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id)
@@ -31,7 +32,7 @@ class BackendStorage(Construct):
         self.dropbox_bucket = s3.Bucket(
             self,
             "DropboxBucket",
-            bucket_name=f"{account_type}-liberaitdc-dropbox",
+            bucket_name=dropbox_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
             versioned=True,
         )
@@ -42,7 +43,7 @@ class BackendStorage(Construct):
             # Store for 14 days which is max retention
             self,
             id="DropboxDeadLetterQueue",
-            queue_name="LiberaDropboxDeadLetterQueue",
+            queue_name="DropboxDeadLetterQueue",
             retention_period=Duration.days(14),
         )
         # 1 Lambda attempt from standard queue before moving failed message to DLQ
@@ -53,7 +54,7 @@ class BackendStorage(Construct):
         self.dropbox_queue = sqs.Queue(
             self,
             id="dropbox_queue",
-            queue_name="LiberaDropboxQueue",
+            queue_name="DropboxQueue",
             # We don't want the message in the queue visable to any other
             # Lambda functions once it has been pulled for processing, this provides a buffer
             # to ensure a single message is not processed by multiple Lambda functions
@@ -72,7 +73,7 @@ class BackendStorage(Construct):
         self.ingest_bucket = s3.Bucket(
             self,
             "IngestBucket",
-            bucket_name=f"{account_type}-liberaitdc-ingest",
+            bucket_name=ingest_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
             versioned=True,
         )
@@ -82,7 +83,7 @@ class BackendStorage(Construct):
             # Store for 14 days which is max retention
             self,
             id="DeadLetterQueue",
-            queue_name="LiberaDeadLetterQueue",
+            queue_name="DeadLetterQueue",
             retention_period=Duration.days(14),
         )
         # 1 Lambda attempt from standard queue before moving failed message to DLQ
@@ -91,7 +92,7 @@ class BackendStorage(Construct):
         self.ingest_queue = sqs.Queue(
             self,
             id="ingest_queue",
-            queue_name="LiberaIngestQueue",
+            queue_name="IngestQueue",
             # We don't want the message in the queue visable to any other
             # Lambda functions once it has been pulled for processing, this provides a buffer
             # to ensure a single message is not processed by multiple Lambda functions
@@ -109,10 +110,10 @@ class BackendStorage(Construct):
         # S3 bucket to store the snapshot data
         # The data is stored in native Lucene format
         # TODO: Determine lifecycle policy, retention on snapshots, for now indefinite
-        self.liberaitdc_opensearch_snapshot_bucket = s3.Bucket(
+        self.opensearch_snapshot_bucket = s3.Bucket(
             self,
             "OSSnapshotBucket",
-            bucket_name=f"{account_type}-liberaitdc-opensearch-manual-snapshot",
+            bucket_name=opensearch_snapshot_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
             versioned=True,
         )
