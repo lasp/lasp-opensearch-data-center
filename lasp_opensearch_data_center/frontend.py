@@ -1,5 +1,5 @@
 from aws_cdk import (
-    Stack,
+    aws_s3 as s3,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_certificatemanager as acm,
@@ -11,29 +11,21 @@ from aws_cdk import (
     Environment,
 )
 from constructs import Construct
-from libera_itdc_cdk.frontend_storage import FrontendStorageStack
 
 
-class FrontEndStaticSite(Construct):
+class FrontEndConstruct(Construct):
     """
-    Create a *self-contained* stack to create the resources required for the Frontend
+    Create a *self-contained* construct to create the resources required for the Frontend
     Web team to deploy their JS app and serve it over https within AWS.
 
-    This stack must be deployed in us-east-1 for the WAF IP restrictions!
+    This construct must be deployed in us-east-1 for the WAF IP restrictions!
 
-    It takes ~5-8 minutes to redeploy this stack for any Cloudfront updates.
+    It takes ~5-8 minutes to redeploy this construct for any Cloudfront updates.
 
     Note: In order to provide https access to the S3 content, Cloudfront is
     required to provide the SSL termination from the browser request.
     Cloudfront also provides extra layers of caching and a larger amount
     of free egress each month (1TB as of 10/2022).
-
-    Steps to create new IAM user for web team after these resources are deployed:
-    ./CreateNewIAMEntity.sh jenkins-liberait-frontend-deploy user
-    ./AddTagToUser.sh jenkins-liberait-frontend-deploy user group frontend
-    ./AddUserToGroup.sh jenkins-liberait-frontend-deploy {account_type}FrontEndGroup
-    ./UpdateIAMUserKeys.sh jenkins-liberait-frontend-deploy generate
-
     """
 
     def __init__(
@@ -42,16 +34,11 @@ class FrontEndStaticSite(Construct):
         construct_id: str,
         account_type: str,
         domain_name: str,
-        frontend_storage_stack: FrontendStorageStack,
-        environment: Environment,
+        frontend_bucket: s3.Bucket,
+        waf_ip_range: str,
         **kwargs,
     ) -> None:
-        super().__init__(scope, construct_id, env=environment, **kwargs)
-
-        if environment.region != "us-east-1":
-            raise ValueError(
-                "The front end stack MUST be deployed to us-east-1 for cloudfront WAF IP reasons."
-            )
+        super().__init__(scope, construct_id, **kwargs)
 
         # Import hosted zone which was created manually during dev and prod account setup
         # during domain registration
@@ -59,8 +46,7 @@ class FrontEndStaticSite(Construct):
             self, "ItdcHostedZone", domain_name=domain_name
         )
 
-        # This sets the website to whatever the passed in domain name is. That should be
-        # dev.libera-itdc.com, prod.libera-itdc.com, or a developer's own dev domain
+        # This sets the website to whatever the passed in domain name is.
         website_url = self.hosted_zone.zone_name
 
         # Define CI/CD group and policy names
@@ -99,9 +85,8 @@ class FrontEndStaticSite(Construct):
                     resources=[
                         # All bucket objects must start with the keyword "frontend"
                         # Additional restrictions imposed at the resource/bucket level
-                        frontend_storage_stack.frontend_bucket.bucket_arn,
-                        frontend_storage_stack.frontend_bucket.bucket_arn
-                        + "/frontend/*",
+                        frontend_bucket.bucket_arn,
+                        frontend_bucket.bucket_arn + "/frontend/*",
                     ],
                 ),
             ],
@@ -115,15 +100,15 @@ class FrontEndStaticSite(Construct):
             validation=acm.CertificateValidation.from_dns(hosted_zone=self.hosted_zone),
         )
 
-        # Create an IP Set with the LASP IP address range
+        # Create an IP Set with the specified IP address range
         self.cfn_iPSet = wafv2.CfnIPSet(
             self,
-            "LASPIPSet",
-            addresses=["128.138.131.0/24"],
+            "ACLIPSet",
+            addresses=[waf_ip_range],
             ip_address_version="IPV4",
             scope="CLOUDFRONT",
-            description="LASP IP Range",
-            name="LASPIPRange",
+            description="Web ACL IP Range",
+            name="WebACLIPRange",
         )
 
         # Create a WAF to enforce IP restrictions to CloudFront
@@ -132,7 +117,7 @@ class FrontEndStaticSite(Construct):
             id="WAF",
             custom_response_bodies={
                 "Custom401ErrorMessage": wafv2.CfnWebACL.CustomResponseBodyProperty(
-                    content="Error: You must be on the LASP Network/VPN to access this webpage.",
+                    content="Error: You are not on a Network/VPN with access to this webpage.",
                     content_type="TEXT_PLAIN",
                 ),
             },
@@ -160,9 +145,9 @@ class FrontEndStaticSite(Construct):
             description="WAFv2 ACL for CloudFront",
             name="waf-cloudfront",
             rules=[
-                # Rule to allow LASP network IPs only
+                # Rule to allow specified ACL network IPs only
                 wafv2.CfnWebACL.RuleProperty(
-                    name="LASPIPsOnly",
+                    name="ACLIPsOnly",
                     priority=0,
                     statement=wafv2.CfnWebACL.StatementProperty(
                         ip_set_reference_statement=wafv2.CfnWebACL.IPSetReferenceStatementProperty(
@@ -172,7 +157,7 @@ class FrontEndStaticSite(Construct):
                     ),
                     visibility_config=wafv2.CfnWebACL.VisibilityConfigProperty(
                         cloud_watch_metrics_enabled=True,
-                        metric_name="WafRuleLASPIPsOnly",
+                        metric_name="WafRuleACLIPsOnly",
                         sampled_requests_enabled=True,
                     ),
                     action=wafv2.CfnWebACL.RuleActionProperty(allow={}),
@@ -187,7 +172,7 @@ class FrontEndStaticSite(Construct):
             default_behavior=cloudfront.BehaviorOptions(
                 # origin_path restricts CloudFront access to frontend/live S3 data
                 origin=origins.S3Origin(
-                    frontend_storage_stack.frontend_bucket,
+                    frontend_bucket,
                     origin_path="frontend/live/",
                 ),
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -200,7 +185,7 @@ class FrontEndStaticSite(Construct):
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,
             certificate=self.cloudfront_cert,
             default_root_object="/index.html",
-            comment="CF dist to serve Libera IT S3 frontend content",
+            comment="CF dist to serve IT S3 frontend content",
             error_responses=[
                 # Web Team frontend apps uses SPA, so redirects are required
                 # Only 403 redirects needed, 404 never encountered due to bucket policy
