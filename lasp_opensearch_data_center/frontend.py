@@ -36,9 +36,15 @@ class FrontEndConstruct(Construct):
         domain_name: str,
         frontend_bucket: s3.Bucket,
         waf_ip_range: str,
+        environment: Environment,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        if environment.region != "us-east-1":
+            raise ValueError(
+                "The front end stack MUST be deployed to us-east-1 for cloudfront WAF IP reasons."
+            )
 
         # Import hosted zone which was created manually during dev and prod account setup
         # during domain registration
