@@ -1,5 +1,5 @@
+"""Storage resources for the front end web application for a data center"""
 from aws_cdk import (
-    Stack,
     aws_s3 as s3,
     aws_route53 as route53,
     aws_iam,
@@ -9,9 +9,9 @@ from aws_cdk import (
 from constructs import Construct
 
 
-class FrontendStorage(Construct):
+class FrontendStorageConstruct(Construct):
     """
-    Create a *self-contained* stack to create the S3 bucket used by the Frontend
+    Construct that creates an S3 bucket used by the Frontend
     stack for site content.
 
     This stack must be deployed in us-east-1 for the WAF IP restrictions!
@@ -25,11 +25,20 @@ class FrontendStorage(Construct):
     def __init__(
         self,
         scope: Construct,
-        domain_name: str,
         construct_id: str,
         environment: Environment,
-        **kwargs,
+        domain_name: str
     ) -> None:
+        """Construct init
+
+        :param scope: Construct
+            The scope in which this Construct is instantiated, usually the `self` inside a Stack.
+        :param construct_id: str
+            ID for this construct instance, e.g. "MyFrontendStorageConstruct"
+        :param environment: Environment
+            AWS environment (account and region)
+        :param domain_name: str
+        """
         super().__init__(scope, construct_id)
 
         if environment.region != "us-east-1":
@@ -37,17 +46,17 @@ class FrontendStorage(Construct):
                 "The front end stack MUST be deployed to us-east-1 for cloudfront WAF IP reasons."
             )
 
-        # Import hosted zone which was created manually during dev and prod account setup
-        # during domain registration
+        # Import existing Hosted Zone for the registered domain name.
+        # This HZ must exist external to the Construct (e.g. in the owner Stack)
         self.hosted_zone = route53.HostedZone.from_lookup(
-            self, "ItdcHostedZone", domain_name=domain_name
+            self, "FrontEndHostedZone", domain_name=domain_name
         )
 
         # This sets the website to whatever the passed in domain name is. That should be
-        # dev.libera-itdc.com, prod.libera-itdc.com, or a developer's own dev domain
+        # dev.my-domain.com, prod.my-domain.com, or a developer's own dev domain
         website_url = self.hosted_zone.zone_name
 
-        # Create a bucket that the web team's Jenkin instance
+        # Create a bucket that a web development team
         # can programmatically PUT data into
         self.frontend_bucket = s3.Bucket(
             self,
@@ -60,7 +69,7 @@ class FrontendStorage(Construct):
         )
 
         # Restrict puts/deletes to the "frontend/" folder to a specific tag
-        # An IAM user will be generated for the webteam via the AWS CLI
+        # An IAM user must be generated for the webteam via the AWS CLI
         # and tagged with group:frontend
         #
         # For the DEV account the Web team will put their built JS apps into this object path:

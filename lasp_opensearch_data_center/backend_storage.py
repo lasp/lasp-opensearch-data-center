@@ -1,11 +1,7 @@
-"""CDK resources for ingesting data dropped into the ingest dropbox"""
-# Standard
-from pathlib import Path
-
+"""Standard set of CDK resources for data storage in the data center back end"""
 # Installed
 from constructs import Construct
 from aws_cdk import (
-    Environment,
     RemovalPolicy,
     aws_s3 as s3,
     aws_sqs as sqs,
@@ -14,18 +10,32 @@ from aws_cdk import (
 )
 
 
-class BackendStorage(Construct):
-    """Stack containing resources used during ingest processing"""
+class BackendStorageConstruct(Construct):
+    """Construct containing standard resources used by the data center back end, including notification mechanisms
+    for data arrival and queuing of arrival events
+    """
 
     def __init__(
         self,
         scope: Construct,
         construct_id: str,
         dropbox_bucket_name: str,
-	ingest_bucket_name: str,
-	opensearch_snapshot_bucket_name: str,
-        **kwargs,
+        ingest_bucket_name: str,
+        opensearch_snapshot_bucket_name: str,
     ) -> None:
+        """Construct init
+
+        :param scope: Construct
+            The scope in which this Construct is instantiated, usually the `self` inside a Stack.
+        :param construct_id: str
+            ID for this construct instance, e.g. "MyBackendStorageConstruct"
+        :param dropbox_bucket_name: str
+            Name of the dropbox storage bucket
+        :param ingest_bucket_name: str
+            Name of the ingest storage bucket
+        :param opensearch_snapshot_bucket_name: str
+            Name of the bucket used to store opensearch index snapshots
+        """
         super().__init__(scope, construct_id)
 
         # DROPBOX BUCKET for all rack files
@@ -109,11 +119,16 @@ class BackendStorage(Construct):
 
         # S3 bucket to store the snapshot data
         # The data is stored in native Lucene format
-        # TODO: Determine lifecycle policy, retention on snapshots, for now indefinite
         self.opensearch_snapshot_bucket = s3.Bucket(
             self,
             "OSSnapshotBucket",
             bucket_name=opensearch_snapshot_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
             versioned=True,
+            lifecycle_rules=[
+                # Define the lifecycle rule to delete objects after 90 days
+                s3.LifecycleRule(
+                    expiration=Duration.days(90)
+                )
+            ]
         )
