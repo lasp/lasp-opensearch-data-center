@@ -35,7 +35,7 @@ class CertificateConstruct(Construct):
         self.hosted_zone = route53.HostedZone.from_lookup(
             self,
             "HostedZone",
-            domain_name=domain_name,  # [dev|prod].libera-itdc.com or a dev account domain
+            domain_name=domain_name,  # [dev|prod].[domain-name].com
         )
 
         # Create a single multi-use cert for this account: *.domain_name
