@@ -1,22 +1,9 @@
-# CHANGELOG
+# Version Changes
 
-## v0.1.0
-
-* Created frontend storage construct
-
-## v0.2.0
-
-* Created backend storage construct
-
-## v0.3.0
-
-* Created backend storage construct
-
-## v0.4.0
-
-* Created networking construct
-
-## v0.5.0
-
-* Created certificate construct
-
+## v1.0.0 (unreleased)
+- `OpenSearchConstruct` for deploying OpenSearch cluster with built-in snapshot Lambda function
+- `CertificateConstruct` that creates SSL certs for an existing Hosted Zone
+- `NetworkingComponentConstruct` for VPC and subnet infrastructure
+- `BackendStorage` construct for storage of back end data
+- `FrontEndConstruct` for deploying a website for the data center 
+- `FrontendStorage` construct for storage of static website

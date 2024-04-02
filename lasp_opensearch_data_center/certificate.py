@@ -1,8 +1,7 @@
+"""Construct for creating certificate resources for a domain Hosted Zone"""
 from aws_cdk import (
-    Stack,
     aws_certificatemanager as acm,
     CfnOutput,
-    Environment,
     aws_route53 as route53,
 )
 from constructs import Construct
@@ -25,13 +24,21 @@ class CertificateConstruct(Construct):
         self,
         scope: Construct,
         construct_id: str,
-        domain_name: str,
-        **kwargs,
+        domain_name: str
     ) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+        """
 
-        # Import hosted zone which was created automatically by AWS
-        # during domain registration
+        :param scope: Construct
+            The scope in which this Construct is instantiated, usually the `self` inside a Stack.
+        :param construct_id: str
+            ID for this construct instance, e.g. "MyBackendStorageConstruct"
+        :param domain_name: str
+            Domain name for an existing registered domain with AWS. e.g. my-domain.com
+        """
+        super().__init__(scope, construct_id)
+
+        # Import existing Hosted Zone for the registered domain name.
+        # This HZ must exist external to the Construct (e.g. in the owner Stack)
         self.hosted_zone = route53.HostedZone.from_lookup(
             self,
             "HostedZone",
