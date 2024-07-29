@@ -20,3 +20,6 @@
 
 * Created certificate construct
 
+## v 0.6.0 (unreleased)
+
+* Added license, code of conduct, and more detail to readme
