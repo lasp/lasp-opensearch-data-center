@@ -9,6 +9,7 @@ venv
 .idea
 .vscode
 .python-version
+.git
 
 # CDK asset staging directory
 .cdk.staging
