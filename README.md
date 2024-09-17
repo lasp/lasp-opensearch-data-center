@@ -1,19 +1,53 @@
 # LASP OpenSearch Data Center CDK Constructs
 
-*This project is a work in progress and is not ready for primetime.*
+A construct library for implementing an OpenSearch data center. This library contains the following constructs:
+* BackendStorageConstruct
+* BackupVault
+* Certificate
+* FrontendStorageConstruct
+* NetworkingComponents
+* Frontend
+* OpenSearch
+* CloudWatchAlarmConstruct
+* Ingest
+* DynamoQuery
 
-This is a Python package containing AWS CDK constructs for building an engineering data center based on OpenSearch.
+Example usage: 
 
-## Front End
+```
+domain_name = "example.com"
+self.frontendStorage = FrontendStorage(
+    self, domain_name, construct_id, environment, **kwargs
+)
 
-### Front End Stack
-L3 Construct that supports deployment of a static website hosted from an S3 bucket, including IAM policy 
-permissions that allow deployment of static files by users within a construct-defined IAM group.
+account_type = "dev"
+self.backendStorage = BackendStorage(
+    self,
+    construct_id,
+    dropbox_bucket_name=f"{account_type}-example-dropbox",
+    ingest_bucket_name=f"{account_type}-example-ingest",
+    opensearch_snapshot_bucket_name=f"{account_type}-example-opensearch-manual-snapshot",
+)
 
-### Front End Storage Stack
-Storage buckets for the front end website.
+frontend_bucket = self.frontendStorage.frontend_bucket
+self.frontend = FrontEndConstruct(
+    self,
+    construct_id=construct_id,
+    account_type=account_type,
+    domain_name=domain_name,
+    frontend_bucket=frontend_bucket,
+    waf_ip_range="1.1.1.0/24",  # Example IP range
+    environment=environment,
+)
 
-## Back End
+self.networking = NetworkingComponentsConstruct(self, construct_id)
+
+self.certificate = CertificateConstruct(
+    self, "CertificateConstruct", domain_name
+)
+
+# TODO: add example usage for constructs as they are completed
+```
 
 ### Networking Construct
 L3 Construct containing a custom VPC with specific subnet configurations.

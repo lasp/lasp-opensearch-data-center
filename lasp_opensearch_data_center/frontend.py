@@ -1,3 +1,4 @@
+"""Construct for deploying a front end website for the Data Center"""
 from aws_cdk import (
     aws_s3 as s3,
     aws_cloudfront as cloudfront,
@@ -13,7 +14,7 @@ from aws_cdk import (
 from constructs import Construct
 
 
-class FrontEndConstruct(Construct):
+class FrontendConstruct(Construct):
     """
     Create a *self-contained* construct to create the resources required for the Frontend
     Web team to deploy their JS app and serve it over https within AWS.
@@ -32,14 +33,31 @@ class FrontEndConstruct(Construct):
         self,
         scope: Construct,
         construct_id: str,
+        environment: Environment,
         account_type: str,
         domain_name: str,
         frontend_bucket: s3.Bucket,
-        waf_ip_range: str,
-        environment: Environment,
-        **kwargs,
+        waf_ip_range: str
     ) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+        """Construct init
+
+        :param scope: Construct
+            The scope in which this Construct is instantiated, usually the `self` inside a Stack.
+        :param construct_id: str
+            ID for this construct instance, e.g. "MyFrontendConstruct"
+        :param environment: Environment
+            AWS environment (account and region)
+        :param account_type: str
+            Naming convention used to name the IAM group and policy that allows deploying code to the S3 bucket
+            for serving the static website.
+        :param domain_name: str
+            Domain name on which to host the website (HostedZone is created from this domain name)
+        :param frontend_bucket: s3.Bucket
+            S3 bucket for storing static site
+        :param waf_ip_range: str
+            IP range restriction for access to the website
+        """
+        super().__init__(scope, construct_id)
 
         if environment.region != "us-east-1":
             raise ValueError(
@@ -49,7 +67,7 @@ class FrontEndConstruct(Construct):
         # Import hosted zone which was created manually during dev and prod account setup
         # during domain registration
         self.hosted_zone = route53.HostedZone.from_lookup(
-            self, "ItdcHostedZone", domain_name=domain_name
+            self, "FrontendHostedZone", domain_name=domain_name
         )
 
         # This sets the website to whatever the passed in domain name is.
@@ -136,13 +154,13 @@ class FrontEndConstruct(Construct):
                     ),
                 ),
             ),
-            ## The scope of this Web ACL.
-            ## Valid options: CLOUDFRONT, REGIONAL.
-            ## For CLOUDFRONT, you must create your WAFv2 resources
-            ## in the US East (N. Virginia) Region, us-east-1
-            ## https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-wafv2-webacl.html#cfn-wafv2-webacl-scope
+            # The scope of this Web ACL.
+            # Valid options: CLOUDFRONT, REGIONAL.
+            # For CLOUDFRONT, you must create your WAFv2 resources
+            # in the US East (N. Virginia) Region, us-east-1
+            # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-wafv2-webacl.html#cfn-wafv2-webacl-scope
             scope="CLOUDFRONT",
-            ## Defines and enables Amazon CloudWatch metrics and web request sample collection.
+            # Defines and enables Amazon CloudWatch metrics and web request sample collection.
             visibility_config=wafv2.CfnWebACL.VisibilityConfigProperty(
                 cloud_watch_metrics_enabled=True,
                 metric_name="WAF-CloudFront",
@@ -177,7 +195,7 @@ class FrontEndConstruct(Construct):
             "cloudfront_distribution",
             default_behavior=cloudfront.BehaviorOptions(
                 # origin_path restricts CloudFront access to frontend/live S3 data
-                origin=origins.S3Origin(
+                origin=origins.S3StaticWebsiteOrigin(
                     frontend_bucket,
                     origin_path="frontend/live/",
                 ),
