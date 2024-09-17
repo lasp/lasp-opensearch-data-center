@@ -7,3 +7,4 @@
 - `BackendStorage` construct for storage of back end data
 - `FrontEndConstruct` for deploying a website for the data center 
 - `FrontendStorage` construct for storage of static website
+- Added license, code of conduct, and more detail to readme
