@@ -20,7 +20,7 @@ from aws_cdk import (
     Environment,
 )
 from constructs import Construct
-from lasp_opensearch_data_center.frontend import FrontendConstruct
+from lasp_opensearch_data_center.constructs.frontend import FrontendConstruct
 
 
 class FrontEndStack(Stack):

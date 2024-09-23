@@ -15,12 +15,10 @@ NOTE: This requires you to have a Route53 Hosted Zone with your registered domai
 """Example Certificate Stack"""
 from aws_cdk import (
     Stack,
-    aws_certificatemanager as acm,
-    CfnOutput,
     Environment,
-    aws_route53 as route53,
 )
 from constructs import Construct
+from lasp_opensearch_data_center.constructs.certificate import CertificateConstruct
 
 
 class CertificateStack(Stack):
@@ -35,32 +33,12 @@ class CertificateStack(Stack):
     ) -> None:
         super().__init__(scope, construct_id, env=environment, **kwargs)
 
-        # Import existing Hosted Zone. You can alternatively _create_ a Hosted Zone here if you don't already have one.
-        self.hosted_zone = route53.HostedZone.from_lookup(
+        certificate = CertificateConstruct(
             self,
-            "HostedZone",
-            domain_name=domain_name,  # e.g. [dev|prod].my-domain.net
+            "CertificateConstruct",
+            domain_name=domain_name
         )
 
-        # Create a single multi-use cert for this account: *.domain_name
-        # in the default region set by the app using os.environ["CDK_DEPLOY_REGION"]
-        self.account_cert = acm.Certificate(
-            self,
-            "DataCenterCertificate",
-            domain_name=f"*.{self.hosted_zone.zone_name}",
-            validation=acm.CertificateValidation.from_dns(hosted_zone=self.hosted_zone),
-        )
-
-        # This allows us to do cross-stack references and use this certificate
-        # in other apps
-        # Here is an example of how to import it from another stack
-        #  certificate = acm.Certificate.from_certificate_arn(
-        #      self, "new-cert-name", Fn.import_value("accountCertificateArn")
-        #  )
-        CfnOutput(
-            self,
-            "CertificateArn",
-            value=self.account_cert.certificate_arn,
-            export_name="accountCertificateArn",
-        )
+        self.hosted_zone = certificate.hosted_zone
+        self.account_cert = certificate.account_cert
 ```

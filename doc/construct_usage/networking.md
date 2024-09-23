@@ -14,17 +14,17 @@ data center stacks and constructs so everything is in the same network.
 """Shared networking resources"""
 from constructs import Construct
 from aws_cdk import (
-    Environment, 
+    Environment,
     Stack
 )
-from lasp_opensearch_data_center.networking import NetworkingComponentsConstruct
+from lasp_opensearch_data_center.constructs.networking import NetworkingComponentsConstruct
 
 
 class NetworkingComponents(Stack):
     """General networking resources for a Data Center"""
 
     def __init__(
-        self, scope: Construct, construct_id: str, environment: Environment, **kwargs
+            self, scope: Construct, construct_id: str, environment: Environment, **kwargs
     ) -> None:
         super().__init__(scope, construct_id, env=environment, **kwargs)
 

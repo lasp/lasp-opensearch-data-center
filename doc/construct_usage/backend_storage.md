@@ -25,7 +25,7 @@ from aws_cdk import (
     Environment,
     Stack
 )
-from lasp_opensearch_data_center.backend_storage import BackendStorageConstruct
+from lasp_opensearch_data_center.constructs.backend_storage import BackendStorageConstruct
 
 
 class BackendStorageStack(Stack):
