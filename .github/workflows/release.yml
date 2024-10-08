@@ -1,0 +1,178 @@
+name: Build and upload to PyPI and create GitHub release
+# https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number }}-${{ github.event.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*'  # Push events for official release tags
+      - 'test-release/[0-9]+.[0-9]+.[0-9]+*'  # Push events for test release tags
+
+jobs:
+  build-dist-artifacts:
+    # This job uses vanilla Python tools rather than Poetry, so we don't have to use third party GitHub actions
+    # e.g. pip, build, twine
+    # If we even want to, we could switch to using something like actions/setup-poetry (but do a search for current
+    # best implementations)
+    name: Build distribution artifacts 📦
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python 🐍
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project dependencies
+        run: python -m pip install build twine
+
+      - name: Build wheel and source distribution
+        run: |
+          python -m build
+
+      - name: Check README rendering for PyPI
+        run: twine check dist/*
+
+      # Save ("upload") the distribution artifacts for use by downstream Actions jobs
+      - name: Upload distribution artifacts 📦
+        uses: actions/upload-artifact@v4  # This allows us to persist the dist directory after the job has completed
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+
+  # Job that pushes dist artifacts to public PyPI for official release tags
+  official-pypi-publish:
+    name: Upload official release to PyPI
+    # Prevent running on any PEP 440 suffixed tags or on test-release tags
+    if: startsWith(github.ref, 'refs/tags/test-release') == false
+    needs:
+      - build-dist-artifacts
+    runs-on: ubuntu-latest
+    environment:
+      name: official-pypi-publish-environment
+      url: https://pypi.org/p/lasp_opensearch_data_center  # Public PyPI
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+      # This downloads the build artifacts from the build job
+      - name: Download all the dists 📦
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish distribution artifacts 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.10
+
+  # Job that pushes dist artifacts to TestPyPI for test release tags
+  # This will fail if the version (according to package metadata) has already been pushed
+  test-pypi-publish:
+    name: Upload testing release to TestPyPI
+    # Only run on test-release tags
+    if: startsWith(github.ref, 'refs/tags/test-release')
+    needs:
+      - build-dist-artifacts
+    runs-on: ubuntu-latest
+    environment:
+      name: test-pypi-publish-environment
+      url: https://test.pypi.org/p/lasp_opensearch_data_center  # TestPyPI
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+      # This downloads the build artifacts from the build job
+      - name: Download all the dists 📦
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish distribution artifacts 📦 to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.10
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  # Job that publishes an official Release to GitHub after pushing to PyPI
+  # This only runs if we have pushed to public PyPI (not TestPyPI)
+  create-github-release:
+    name: Upload dist artifacts to GitHub Release
+    needs:
+      - official-pypi-publish
+    runs-on: ubuntu-latest
+    environment:
+      name: create-github-release-environment
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for sigstore
+      contents: write  # IMPORTANT: mandatory for making GitHub Releases
+
+    steps:
+      - name: Download the artifacts 📦
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Sign the dists 📦 with Sigstore 🔑
+        uses: sigstore/gh-action-sigstore-python@v2.1.1
+        with:
+          inputs: >-
+            ./dist/*.tar.gz
+            ./dist/*.whl
+
+      - name: Determine if the release is a prerelease
+        # Checks the regex form of the tag.
+        # Marks final releases only for tags matching the regex (no version suffixes)
+        # All other releases are marked as prereleases
+        run: |
+          if [[ "${{ github.ref_name }}" =~ '^.*[0-9]*\.[0-9]*\.[0-9]*$' ]]; then
+          echo "PRE_RELEASE_OPTION=''" >> $GITHUB_ENV  # Not a prerelease
+          else
+          echo "PRE_RELEASE_OPTION='--prerelease'" >> $GITHUB_ENV  # Is a prerelease
+          fi
+
+      - name: Get latest non-prerelease release
+        # This fetches the "latest" (non-prerelease) release ref,
+        # so we can generate release notes from that point instead of the most recent prerelease.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          latest_release=$(gh release list --repo "${{ github.repository }}" --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease == false) | .tagName' | head -n 1)
+          if [ -z "$latest_release" ]; then
+            echo "No non-prerelease release found."
+            exit 1
+          fi
+          echo "LATEST_RELEASE_TAG=$latest_release" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # Uses the GitHub CLI to generate the Release and auto-generate the release notes. Also generates
+        # the Release title based on the annotation on the git tag.
+        run: >-
+          RELEASE_NAME=$(basename "${{ github.ref_name }}")
+          gh release create
+          '${{ github.ref_name }}'
+          --repo '${{ github.repository }}'
+          --title "$RELEASE_NAME"
+          ${{ env.PRE_RELEASE_OPTION }}
+          --generate-notes
+          --notes-start-tag '${{ env.LATEST_RELEASE_TAG }}'
+
+      - name: Upload artifact 📦 signatures to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # Upload to GitHub Release using the `gh` CLI.
+        # `dist/` contains the built packages, and the
+        # sigstore-produced signatures and certificates.
+        run: >-
+          gh release upload
+          '${{ github.ref_name }}' dist/**
+          --repo '${{ github.repository }}'
