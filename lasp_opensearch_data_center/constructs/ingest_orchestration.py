@@ -53,6 +53,8 @@ class IngestProcessingConstruct(Construct):
         dropbox_queue: sqs.Queue,
         dropbox_lambda: lambda_.Function,
         ingest_lambda: lambda_.Function,
+        dropbox_lambda_env: Optional[dict] = None,
+        ingest_lambda_env: Optional[dict] = None,
         backup_vault: Optional[backup.BackupVault] = None,
     ) -> None:
         """Construct init for ingest processing orchestration construct
@@ -79,6 +81,14 @@ class IngestProcessingConstruct(Construct):
             Lambda function for validating and organizing incoming data from the Dropbox Bucket to the Ingest Bucket
         ingest_lambda : lambda_.Function
             Lambda function for ingest data into opensearch.
+        dropbox_lambda_env : Optional[dict]
+            Environment variables for the Dropbox Lambda function. These variables overwrite the defaults assigned
+            to the function internally to this construct. See constants.DropboxLambdaEnv.
+        ingest_lambda_env : Optional[dict]
+            Environment variables for the Ingest Lambda function. These variables overwrite the defaults assigned
+            to the function internally to this construct. See constants.IngestLambdaEnv.
+        backup_vault : Optional[backup.BackupVault]
+            Backup vault to use for backing up the ingest status table.
         """
         super().__init__(scope, construct_id)
 
@@ -87,7 +97,8 @@ class IngestProcessingConstruct(Construct):
             open_search_domain=open_search_domain,
             ingest_bucket=ingest_bucket,
             ingest_queue=ingest_queue,
-            ingest_lambda=ingest_lambda
+            ingest_lambda=ingest_lambda,
+            ingest_lambda_env=ingest_lambda_env
         )
 
         # Orchestration for validating and moving files from Dropbox Bucket to Ingest Bucket
@@ -95,7 +106,8 @@ class IngestProcessingConstruct(Construct):
             dropbox_bucket=dropbox_bucket,
             ingest_bucket=ingest_bucket,
             dropbox_queue=dropbox_queue,
-            dropbox_lambda=dropbox_lambda
+            dropbox_lambda=dropbox_lambda,
+            dropbox_lambda_env=dropbox_lambda_env
         )
 
         # Conditionally set up backups for the Ingest Status DDB Table
@@ -108,6 +120,7 @@ class IngestProcessingConstruct(Construct):
         ingest_bucket: s3.Bucket,
         dropbox_queue: sqs.Queue,
         dropbox_lambda: lambda_.Function,
+        dropbox_lambda_env: Optional[dict] = None
     ):
         """Sets up the Lambda trigger based on data arrival and configures environment variables in the Dropbox
         Lambda function.
@@ -122,6 +135,9 @@ class IngestProcessingConstruct(Construct):
         dropbox_lambda : lambda_.Function
             Lambda function for validating and moving files from the Dropbox Bucket to the Ingest Bucket. This function
             is modified with environment variables containing the Dropbox Bucket and Ingest Bucket names.
+        dropbox_lambda_env : Optional[dict]
+            User defined environment variables for the Dropbox Lambda. These overwrite the defaults when they are
+            assigned to the Function.
         """
         # Add standard environment variables to the Dropbox Lambda for use by the runtime code
         dropbox_lambda_environment = {
@@ -129,6 +145,10 @@ class IngestProcessingConstruct(Construct):
             DropboxLambdaEnv.INGEST_BUCKET_NAME: ingest_bucket.bucket_name,
             DropboxLambdaEnv.CONSOLE_LOG_LEVEL: "INFO",
         }
+        if dropbox_lambda_env:
+            # Update the default environment variables with the user specified environment variables
+            dropbox_lambda_environment = {**dropbox_lambda_environment, **dropbox_lambda_env}
+
         for env_var, value in dropbox_lambda_environment.items():
             dropbox_lambda.add_environment(env_var.value, value)
 
@@ -158,6 +178,7 @@ class IngestProcessingConstruct(Construct):
         ingest_bucket: s3.Bucket,
         ingest_queue: sqs.Queue,
         ingest_lambda: lambda_.Function,
+        ingest_lambda_env: Optional[dict] = None
     ):
         """Creates orchestration resources required for ingesting data into OpenSearch.
 
@@ -167,6 +188,15 @@ class IngestProcessingConstruct(Construct):
         ----------
         open_search_domain : opensearch.Domain
             The opensearch domain, e.g. from the lasp_opensearch_data_center.opensearch.OpenSearchConstruct
+        ingest_bucket : s3.Bucket
+            Storage for files to be ingested
+        ingest_queue : sqs.Queue
+            SQS Queue for ingesting files
+        ingest_lambda : lambda_.Function
+            Lambda that runs ingest logic (externally defined)
+        ingest_lambda_env : Optional[dict]
+            Optional dictionary containing user defined Lambda environment variables. These are merged with the
+            default environment variables and added to the Ingest Lambda.
         """
 
         # Dynamo DB table to record ingest state of incoming files
@@ -219,6 +249,10 @@ class IngestProcessingConstruct(Construct):
             IngestLambdaEnv.MAX_FILE_SIZE_MB: "100",
             IngestLambdaEnv.OPENSEARCH_CLIENT_REQUEST_TIMEOUT: "60",
         }
+        if ingest_lambda_env:
+            # Update the default environment variables with the user specified environment variables
+            ingest_lambda_environment = {**ingest_lambda_environment, **ingest_lambda_env}
+
         for env_var, value in ingest_lambda_environment.items():
             ingest_lambda.add_environment(env_var.value, value)
 

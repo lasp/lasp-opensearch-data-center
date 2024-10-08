@@ -1,7 +1,7 @@
 # Ingest Processing Construct Usage
 
 The Ingest Processing Construct contains resources uses to orchestrate ingestion of data files into OpenSearch. 
-The actual processing code must be supplied in the form Lambda functions: Dropbox Lambda and Ingest Lambda.
+The actual processing code must be supplied in the form of Lambda functions: Dropbox Lambda and Ingest Lambda.
 
 ## Components
 
@@ -10,6 +10,16 @@ The actual processing code must be supplied in the form Lambda functions: Dropbo
 - Ingest Status Table which can be used to keep track of ingest status, using the functions provided in 
   `ingest_status.py` for interacting with DynamoDB (or you can write your own DDB code in your Lambda).
 - Optional backup plan for Ingest Status Table (if backup_vault is provided)
+
+## Configuring Lambda Environment Variables
+
+The Dropbox and Ingest Lambda functions must be externally defined by the user of this library and passed in to the 
+`IngestProcessingConstruct` as configuration objects. Internally, the construct configures the Lambdas with the correct 
+environment variables, standardized in `constants.py` using the enums `DropboxLambdaEnv` and `IngestLambdaEnv`. 
+However, this configuration is only an update to the Lambda 
+environment. You as the user can pass whatever environment variables you want associated with the Lambda and the 
+`IngestProcessingConstruct` will not overwrite any pre-defined environment variables. It will only add missing 
+variables.
 
 # Example Usage in Stack
 
