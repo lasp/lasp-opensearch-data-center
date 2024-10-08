@@ -32,25 +32,26 @@ class OpenSearchConstruct(Construct):
     Access to the website GUI is available via https://search.{hosted_zone.zone_name}/_dashboards/app/home#/
     """
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        environment: Environment,
-        hosted_zone: route53.HostedZone,
-        certificate: acm.Certificate,
-        opensearch_snapshot_bucket: s3.Bucket,
-        opensearch_domain_name: str,
-        opensearch_instance_type: str = "t3.medium.search",
-        opensearch_version: opensearch.EngineVersion = opensearch.EngineVersion.open_search("2.9"),
-        opensearch_zone_awareness: Optional[opensearch.ZoneAwarenessConfig] = None,
-        opensearch_node_count: int = 1,
-        opensearch_ip_access_range: str = '0.0.0.0/0',
-        snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
-        removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
-        snapshot_lambda: Optional[lambda_.Function] = None,
-        snapshot_schedule: events.Schedule = events.Schedule.cron(
-                minute="0", hour="9", month="*", week_day="*", year="*"
-            )
+            self,
+            scope: Construct,
+            construct_id: str,
+            *,
+            environment: Environment,
+            hosted_zone: route53.HostedZone,
+            certificate: acm.Certificate,
+            opensearch_snapshot_bucket: s3.Bucket,
+            opensearch_domain_name: str,
+            opensearch_instance_type: str = "t3.medium.search",
+            opensearch_version: opensearch.EngineVersion = opensearch.EngineVersion.open_search("2.9"),
+            opensearch_zone_awareness: Optional[opensearch.ZoneAwarenessConfig] = None,
+            opensearch_node_count: int = 1,
+            opensearch_ip_access_range: str = '0.0.0.0/0',
+            snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
+            removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
+            snapshot_lambda: Optional[lambda_.Function] = None,
+            snapshot_schedule: events.Schedule = events.Schedule.cron(
+                    minute="0", hour="9", month="*", week_day="*", year="*"
+                )
     ) -> None:
         """
         Construct init.

@@ -23,11 +23,12 @@ class FrontendStorageConstruct(Construct):
     """
 
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        environment: Environment,
-        domain_name: str
+            self,
+            scope: Construct,
+            construct_id: str,
+            *,
+            environment: Environment,
+            domain_name: str
     ) -> None:
         """Construct init
 

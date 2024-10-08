@@ -43,19 +43,20 @@ class IngestProcessingConstruct(Construct):
     """Construct containing resources used to orchestrate dropbox and ingest processing"""
 
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        open_search_domain: opensearch.Domain,
-        dropbox_bucket: s3.Bucket,
-        ingest_bucket: s3.Bucket,
-        ingest_queue: sqs.Queue,
-        dropbox_queue: sqs.Queue,
-        dropbox_lambda: lambda_.Function,
-        ingest_lambda: lambda_.Function,
-        dropbox_lambda_env: Optional[dict] = None,
-        ingest_lambda_env: Optional[dict] = None,
-        backup_vault: Optional[backup.BackupVault] = None,
+            self,
+            scope: Construct,
+            construct_id: str,
+            *,
+            open_search_domain: opensearch.Domain,
+            dropbox_bucket: s3.Bucket,
+            ingest_bucket: s3.Bucket,
+            ingest_queue: sqs.Queue,
+            dropbox_queue: sqs.Queue,
+            dropbox_lambda: lambda_.Function,
+            ingest_lambda: lambda_.Function,
+            dropbox_lambda_env: Optional[dict] = None,
+            ingest_lambda_env: Optional[dict] = None,
+            backup_vault: Optional[backup.BackupVault] = None,
     ) -> None:
         """Construct init for ingest processing orchestration construct
 

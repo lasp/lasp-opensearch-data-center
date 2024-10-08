@@ -16,12 +16,13 @@ class BackendStorageConstruct(Construct):
     """
 
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        dropbox_bucket_name: str,
-        ingest_bucket_name: str,
-        opensearch_snapshot_bucket_name: str,
+            self,
+            scope: Construct,
+            construct_id: str,
+            *,
+            dropbox_bucket_name: str,
+            ingest_bucket_name: str,
+            opensearch_snapshot_bucket_name: str,
     ) -> None:
         """Construct init
 
