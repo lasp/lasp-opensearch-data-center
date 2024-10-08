@@ -47,6 +47,31 @@ class BackendStorageConstruct(Construct):
             versioned=True,
         )
 
+        # INGEST BUCKET for all pre-processed objects
+        self.ingest_bucket = s3.Bucket(
+            self,
+            "IngestBucket",
+            bucket_name=ingest_bucket_name,
+            removal_policy=RemovalPolicy.DESTROY,
+            versioned=True,
+        )
+
+        # S3 bucket to store the snapshot data
+        # The data is stored in native Lucene format
+        self.opensearch_snapshot_bucket = s3.Bucket(
+            self,
+            "OSSnapshotBucket",
+            bucket_name=opensearch_snapshot_bucket_name,
+            removal_policy=RemovalPolicy.DESTROY,
+            versioned=True,
+            lifecycle_rules=[
+                # Define the lifecycle rule to delete objects after 90 days
+                s3.LifecycleRule(
+                    expiration=Duration.days(90)
+                )
+            ]
+        )
+
         # NOTE: We arguably don't need this queue but I don't think it will do any harm and may provide visibility.
         # Create DLQ for dropbox
         dropbox_dlq = sqs.Queue(
@@ -73,19 +98,9 @@ class BackendStorageConstruct(Construct):
         )
 
         # Send files from dropbox bucket into SQS
-        dropbox_bucket_notification = s3_notify.SqsDestination(self.dropbox_queue)
-        dropbox_bucket_notification.bind(self, self.dropbox_bucket)
-
-        # Add s3 Event notification for all files appearing in dropbox bucket
-        self.dropbox_bucket.add_object_created_notification(dropbox_bucket_notification)
-
-        # INGEST BUCKET for all pre-processed objects
-        self.ingest_bucket = s3.Bucket(
-            self,
-            "IngestBucket",
-            bucket_name=ingest_bucket_name,
-            removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+        self.dropbox_bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED,
+            s3_notify.SqsDestination(self.dropbox_queue)
         )
 
         # Create DLQ
@@ -103,7 +118,7 @@ class BackendStorageConstruct(Construct):
             self,
             id="ingest_queue",
             queue_name="IngestQueue",
-            # We don't want the message in the queue visable to any other
+            # We don't want the message in the queue visible to any other
             # Lambda functions once it has been pulled for processing, this provides a buffer
             # to ensure a single message is not processed by multiple Lambda functions
             visibility_timeout=Duration.minutes(20),
@@ -111,24 +126,7 @@ class BackendStorageConstruct(Construct):
         )
 
         # Send files from ingest bucket into SQS
-        ingest_bucket_notification = s3_notify.SqsDestination(self.ingest_queue)
-        ingest_bucket_notification.bind(self, self.ingest_bucket)
-
-        # Add s3 Event notification for all files appearing in ingest bucket
-        self.ingest_bucket.add_object_created_notification(ingest_bucket_notification)
-
-        # S3 bucket to store the snapshot data
-        # The data is stored in native Lucene format
-        self.opensearch_snapshot_bucket = s3.Bucket(
-            self,
-            "OSSnapshotBucket",
-            bucket_name=opensearch_snapshot_bucket_name,
-            removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
-            lifecycle_rules=[
-                # Define the lifecycle rule to delete objects after 90 days
-                s3.LifecycleRule(
-                    expiration=Duration.days(90)
-                )
-            ]
+        self.ingest_bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED,
+            s3_notify.SqsDestination(self.ingest_queue)
         )

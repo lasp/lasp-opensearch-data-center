@@ -23,7 +23,8 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_opensearchservice as opensearch
 )
-from lasp_opensearch_data_center.opensearch import OpenSearchConstruct
+from lasp_opensearch_data_center.constructs.opensearch import OpenSearchConstruct
+
 
 class OpenSearch(Stack):
     """OpenSearch stack to create the Open Search Domain and cluster nodes
@@ -33,14 +34,14 @@ class OpenSearch(Stack):
     """
 
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        hosted_zone: route53.HostedZone,
-        certificate: acm.Certificate,
-        environment: Environment,
-        snapshot_bucket: s3.Bucket,
-        **kwargs,
+            self,
+            scope: Construct,
+            construct_id: str,
+            hosted_zone: route53.HostedZone,
+            certificate: acm.Certificate,
+            environment: Environment,
+            snapshot_bucket: s3.Bucket,
+            **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, env=environment, **kwargs)
         self.opensearch = OpenSearchConstruct(

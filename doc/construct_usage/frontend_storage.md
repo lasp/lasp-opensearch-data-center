@@ -19,7 +19,7 @@ from aws_cdk import (
     Environment
 )
 from constructs import Construct
-from lasp_opensearch_data_center.frontend_storage import FrontendStorageConstruct
+from lasp_opensearch_data_center.constructs.frontend_storage import FrontendStorageConstruct
 
 
 class FrontendStorageStack(Stack):

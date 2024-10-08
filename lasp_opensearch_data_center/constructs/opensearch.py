@@ -1,6 +1,7 @@
 """Open Search Stack"""
 # Standard
 from pathlib import Path
+from typing import Optional
 import warnings
 # Installed
 from constructs import Construct
@@ -20,6 +21,8 @@ from aws_cdk import (
     aws_events_targets as targets,
     aws_ecr_assets as ecr_assets
 )
+# Local
+from lasp_opensearch_data_center.constructs.constants import OPENSEARCH_SNAPSHOT_REPO_NAME
 
 
 class OpenSearchConstruct(Construct):
@@ -39,67 +42,68 @@ class OpenSearchConstruct(Construct):
         opensearch_domain_name: str,
         opensearch_instance_type: str = "t3.medium.search",
         opensearch_version: opensearch.EngineVersion = opensearch.EngineVersion.open_search("2.9"),
-        opensearch_zone_awareness: opensearch.ZoneAwarenessConfig = None,
+        opensearch_zone_awareness: Optional[opensearch.ZoneAwarenessConfig] = None,
         opensearch_node_count: int = 1,
         opensearch_ip_access_range: str = '0.0.0.0/0',
-        snapshot_repo_name: str = "opensearch-snapshot-repo-1",
-        docker_context_path: str = str((Path(__file__).parent / "lambda").absolute()),
+        snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
         removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
+        snapshot_lambda: Optional[lambda_.Function] = None,
         snapshot_schedule: events.Schedule = events.Schedule.cron(
                 minute="0", hour="9", month="*", week_day="*", year="*"
             )
     ) -> None:
-        """Construct init
+        """
+        Construct init.
 
-        :param scope:
+        Parameters
+        ----------
+        scope : Construct
             The scope in which this Construct is instantiated, usually the `self` inside a Stack.
-        :param construct_id:
-            ID for this construct instance, e.g. "MyOpenSearchConstruct"
-        :param environment: Environment
-            AWS environment (account and region)
-        :param hosted_zone: route53.HostedZone
-            Hosted zone to host the OpenSearch instance. Associated with a domain name, (e.g. `my-domain-name.net`).
+        construct_id : str
+            ID for this construct instance, e.g. "MyOpenSearchConstruct".
+        environment : Environment
+            AWS environment (account and region).
+        hosted_zone : route53.HostedZone
+            Hosted zone to host the OpenSearch instance. Associated with a domain name (e.g. `my-domain-name.net`).
             Can be sourced from a lasp_opensearch_data_center CertificateStack.
-        :param certificate: acm.Certificate
-            Pre-defined certificate for OpenSearch. This is likely to be used elsewhere so it is left to the user
+        certificate : acm.Certificate
+            Pre-defined certificate for OpenSearch. This is likely to be used elsewhere, so it is left to the user
             to define it outside of this Construct. Can be sourced from a lasp_opensearch_data_center CertificateStack.
-        :param opensearch_snapshot_bucket: s3.Bucket
+        opensearch_snapshot_bucket : s3.Bucket
             S3 bucket in which to store periodic snapshots of OpenSearch indexes. Snapshots are taken using a daily
             scheduled Lambda that makes an API call to take the snapshot. See `docker_context_path` if you want
-            to customize this Lambda function.
-            This is required so that you can manage your persistent storage independent of your OS cluster deployment.
-        :param opensearch_domain_name: str
-            Name of opensearch domain. e.g. (`opensearch-testing`).
-            Required to name the OpenSearch Domain but does not affect access URLs.
-        :param opensearch_instance_type: str, Optional
-            EC2 instance type on which to run OpenSearch (needs pretty significant resources).
+            to customize this Lambda function. This is required so that you can manage your persistent storage
+            independent of your OS cluster deployment.
+        opensearch_domain_name : str
+            Name of the OpenSearch domain, e.g. (`opensearch-testing`). Required to name the OpenSearch Domain
+            but does not affect access URLs.
+        opensearch_instance_type : str, optional
+            EC2 instance type on which to run OpenSearch (needs significant resources).
             Default is `t3.medium.search` to keep costs down on your first deployment.
             AWS lists supported OpenSearch instance types and recommendations here:
             https://docs.aws.amazon.com/opensearch-service/latest/developerguide/supported-instance-types.html
-        :param opensearch_version: str, Optional
-            Version of OS to deploy. e.g. "2.5".
-            Default is "2.9".
-        :param opensearch_zone_awareness: opensearch.ZoneAwarenessConfig, Optional
-            AWS can optionally distribute OS nodes across multiple AZs to increase availability.
+        opensearch_version : str, optional
+            Version of OpenSearch to deploy, e.g. "2.5". Default is "2.9".
+        opensearch_zone_awareness : opensearch.ZoneAwarenessConfig, optional
+            AWS can optionally distribute OpenSearch nodes across multiple AZs to increase availability.
             Default is None (no zone awareness).
-        :param opensearch_node_count: int, Optional
-            Number of OS nodes to deploy. If availability becomes an issue, increasing number of nodes can help.
+        opensearch_node_count : int, optional
+            Number of OpenSearch nodes to deploy. If availability becomes an issue, increasing the number of nodes can help.
             A rule of thumb is to keep the number of nodes 1:1 with the number of shards configured in your indexes.
             Default is a single node, used for ingest (write) and read queries.
-        :param opensearch_ip_access_range: str, Optional
+        opensearch_ip_access_range : str, optional
             IP CIDR block on which to allow OpenSearch domain access (e.g. for security purposes).
-            Default is 0.0.0.0/0 (open everywhere).
-            Note: leaving this unchanged will raise a warning that your cluster is available to the public internet.
-        :param snapshot_repo_name: str, Optional
-            Nome of the snapshot repository (used by OpenSearch to name the snapshots written to the snapshot bucket).
-            Default is "opensearch-snapshot-repo-1"
-        :param docker_context_path: str, Optional
-            Custom location in which to find a Dockerfile defining a target called `snapshot-lambda`. This construct
-            provides a sensible default that takes a snapshot without doing anything fancy.
-        :param snapshot_schedule: events.Schedule
-            Cron schedule on which to run the snapshot Lambda.
-            Default is 9am UTC daily.
-            See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html
+            Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
+            is available to the public internet.
+        snapshot_repo_name : str, optional
+            Name of the snapshot repository (used by OpenSearch to name the snapshots written to the snapshot bucket).
+            Default is "opensearch-snapshot-repo".
+        snapshot_lambda : Optional[lambda_.Function], optional
+            Override for the default snapshot Lambda function for taking periodic snapshots of the OpenSearch cluster.
+            Default is None, which creates a standard snapshot taker for you.
+        snapshot_schedule : events.Schedule
+            Cron schedule on which to run the snapshot Lambda. Default is 9am UTC daily.
+            See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html.
         """
         super().__init__(scope, construct_id)
 
@@ -230,27 +234,31 @@ class OpenSearchConstruct(Construct):
             ],
         )
 
-        docker_image_code = lambda_.DockerImageCode.from_image_asset(
-            directory=docker_context_path,
-            target="snapshot-lambda",
-            platform=ecr_assets.Platform.LINUX_AMD64
-        )
+        if snapshot_lambda is None:
+            # The lambda directory is considered a data directory for the package and is packaged along with the
+            # python code during distribution.
+            docker_context_path = str((Path(__file__).parent.parent / "lambda").absolute())
+            docker_image_code = lambda_.DockerImageCode.from_image_asset(
+                directory=docker_context_path,
+                target="snapshot-lambda",  # Hard-coded to the target name in lambda/Dockerfile
+                platform=ecr_assets.Platform.LINUX_AMD64
+            )
 
-        snapshot_lambda = lambda_.DockerImageFunction(
-            self,
-            "SnapshotLambda",
-            code=docker_image_code,
-            environment={
-                # The snapshot process requires the full API HTTP endpoint
-                "OPEN_SEARCH_ENDPOINT": f"https://{self.domain.domain_endpoint}/",
-                "SNAPSHOT_S3_BUCKET": self.opensearch_snapshot_bucket.bucket_name,
-                "SNAPSHOT_ROLE_ARN": self.opensearch_snapshot_role.role_arn,
-                "SNAPSHOT_REPO_NAME": snapshot_repo_name,
-            },
-            timeout=Duration.seconds(60 * 15),
-            memory_size=512,
-            retry_attempts=0,
-        )
+            snapshot_lambda = lambda_.DockerImageFunction(
+                self,
+                "SnapshotLambda",
+                code=docker_image_code,
+                environment={
+                    # The snapshot process requires the full API HTTP endpoint
+                    "OPEN_SEARCH_ENDPOINT": f"https://{self.domain.domain_endpoint}/",
+                    "SNAPSHOT_S3_BUCKET": self.opensearch_snapshot_bucket.bucket_name,
+                    "SNAPSHOT_ROLE_ARN": self.opensearch_snapshot_role.role_arn,
+                    "SNAPSHOT_REPO_NAME": snapshot_repo_name,
+                },
+                timeout=Duration.seconds(60 * 15),
+                memory_size=512,
+                retry_attempts=0,
+            )
 
         # Add permissions for Lambda to access OpenSearch
         snapshot_lambda.add_to_role_policy(
