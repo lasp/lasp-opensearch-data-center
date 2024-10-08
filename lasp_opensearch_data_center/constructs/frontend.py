@@ -30,14 +30,15 @@ class FrontendConstruct(Construct):
     """
 
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        environment: Environment,
-        account_type: str,
-        domain_name: str,
-        frontend_bucket: s3.Bucket,
-        waf_ip_range: str
+            self,
+            scope: Construct,
+            construct_id: str,
+            *,
+            environment: Environment,
+            account_type: str,
+            domain_name: str,
+            frontend_bucket: s3.Bucket,
+            waf_ip_range: str
     ) -> None:
         """Construct init
 

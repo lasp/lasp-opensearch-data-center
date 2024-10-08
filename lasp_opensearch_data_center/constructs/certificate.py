@@ -21,10 +21,11 @@ class CertificateConstruct(Construct):
     """
 
     def __init__(
-        self,
-        scope: Construct,
-        construct_id: str,
-        domain_name: str
+            self,
+            scope: Construct,
+            construct_id: str,
+            *,
+            domain_name: str
     ) -> None:
         """
 

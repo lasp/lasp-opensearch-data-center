@@ -7,8 +7,12 @@ from aws_cdk import Environment, aws_ec2 as ec2, aws_route53 as r53
 class NetworkingComponentsConstruct(Construct):
     """General networking resources for Opensearch Data Center"""
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+    def __init__(
+            self,
+            scope: Construct,
+            construct_id: str
+    ) -> None:
+        super().__init__(scope, construct_id)
 
         self.vpc = ec2.Vpc(
             self,

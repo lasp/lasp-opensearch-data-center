@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: 'lasp_opensearch_data_center'
+type: software
+version: '1.0.0'
+description: An AWS CDK Construct library for creating an I&T data center using AWS OpenSearch.
+license: BSD-3-Clause
+abstract: The LASP OpenSearch Data Center library contains AWS CDK Constructs and assorted utilities for creating
+    an Integration and Test data center in the cloud. The Constructs defined in the library using the AWS CDK to
+    create storage resources, an OpenSearch cluster/domain, and orchestration resources for automatically
+    ingesting data into OpenSearch using Lambda functions defined by the end user.
+authors:
+- email: gavin.medley@lasp.colorado.edu
+  name: Gavin Medley
+  orcid: "0000-0002-3520-9715"
+- email: brian.mcclellan@lasp.colorado.edu
+  name: Brian McClellan
+  orcid: "0009-0002-8228-1485"
+- name: Luke Soderquist
+maintainers:
+- email: gavin.medley@lasp.colorado.edu
+  name: Gavin Medley
+  orcid: "0000-0002-3520-9715"
+repository-code: "https://github.com/lasp/lasp-opensearch-data-center"
+url: ""
