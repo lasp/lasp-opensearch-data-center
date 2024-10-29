@@ -1,6 +1,9 @@
 # Version Changes
 
-## v1.0.0 (unreleased)
+## v1.0.1 (released)
+- Refactor lambda runtime subpackage into proper python package
+
+## v1.0.0 (released)
 - `IngestProcessingConstruct` for deploying the orchestration and Lambdas that run ingest processing
 - `OpenSearchConstruct` for deploying OpenSearch cluster with built-in snapshot Lambda function
 - `CertificateConstruct` that creates SSL certs for an existing Hosted Zone

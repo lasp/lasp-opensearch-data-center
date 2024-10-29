@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 title: 'lasp_opensearch_data_center'
 type: software
-version: '1.0.0'
+version: '1.0.1'
 description: An AWS CDK Construct library for creating an I&T data center using AWS OpenSearch.
 license: BSD-3-Clause
 abstract: The LASP OpenSearch Data Center library contains AWS CDK Constructs and assorted utilities for creating
