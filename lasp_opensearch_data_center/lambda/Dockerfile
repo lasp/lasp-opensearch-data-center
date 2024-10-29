@@ -37,7 +37,7 @@ ENV PATH="$PATH:/root/.local/bin"
 # Copy contents of directory
 COPY lambda_entrypoint.sh .
 COPY pyproject.toml .
-COPY *.py .
+COPY opensearch_data_center_lambda_runtime opensearch_data_center_lambda_runtime
 # We lock all dependencies early so that it can be cached for other builds since dependencies don't change much
 RUN poetry lock
 # Install dependencies
@@ -48,4 +48,4 @@ ENTRYPOINT [ "./lambda_entrypoint.sh" ]
 
 # Target for OS snapshot lambda
 FROM lambda-base AS snapshot-lambda
-CMD [ "snapshot_handler.handler" ]
+CMD [ "opensearch_data_center_lambda_runtime.snapshot_handler.handler" ]
