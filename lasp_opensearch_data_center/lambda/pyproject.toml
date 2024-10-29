@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "lambda_runtime"
+name = "opensearch_data_center_lambda_runtime"
 version = "0.1.0"
 description = "Dependency manager for lambda runtime of lasp_opensearch_data_center construct library"
 authors = [

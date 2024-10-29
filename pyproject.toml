@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "lasp_opensearch_data_center"
-version = "1.0.0"
+version = "1.0.1"
 description = "Construct library for creating a CSV ingest pipeline into OpenSearch with a front end website."
 authors = [
     "Gavin Medley <gavin.medley@lasp.colorado.edu>",
@@ -18,7 +18,7 @@ aws-cdk-lib = "^2.0.0"
 constructs = "^10.0.0"
 
 [tool.poetry.group.dev.dependencies]
-lambda_runtime = {path="lasp_opensearch_data_center/lambda", develop=true}
+opensearch_data_center_lambda_runtime = {path="lasp_opensearch_data_center/lambda", develop=true}
 
 [build-system]
 requires = ["poetry-core"]
