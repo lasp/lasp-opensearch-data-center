@@ -4,6 +4,7 @@ from aws_cdk import (
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
     aws_certificatemanager as acm,
+    aws_cognito as cognito,
     aws_iam,
     aws_route53 as route53,
     aws_route53_targets as targets,
@@ -73,6 +74,52 @@ class FrontendConstruct(Construct):
 
         # This sets the website to whatever the passed in domain name is.
         website_url = self.hosted_zone.zone_name
+
+        # Create a Cognito Identity Pool for guest/unauthenticated access - as of 10/2024 no L2 construct available
+        identity_pool = cognito.CfnIdentityPool(
+            self, "LiberaITDCWebsiteIdentityPool",
+            identity_pool_name="Libera ITDC Website",
+            allow_unauthenticated_identities=True,  # Allow unauthenticated access
+        )
+
+        # Create role for frontend website to pull CW plots
+        website_guest_role = aws_iam.Role(
+            self, "WebsiteGuestRole",
+            role_name="libera-itdc-website-guest",
+            assumed_by=aws_iam.FederatedPrincipal(
+                "cognito-identity.amazonaws.com",
+                {
+                    "StringEquals": {"cognito-identity.amazonaws.com:aud": identity_pool.ref},
+                    "ForAnyValue:StringLike": {"cognito-identity.amazonaws.com:amr": "unauthenticated"}
+                },
+                "sts:AssumeRoleWithWebIdentity"
+            )
+        )
+
+        # Add IAM policy to the role
+        website_guest_role.add_to_policy(
+            aws_iam.PolicyStatement(
+                effect=aws_iam.Effect.ALLOW,
+                actions=[
+                    "cognito-identity:GetCredentialsForIdentity",
+                    "cloudwatch:GetMetricWidgetImage"
+                ],
+                resources=[
+                    # Directly from AWS console "Selected actions only support the all resources wildcard('*')."
+                    # so we must use the wildcard for the cloudwatch:GetMetricWidgetImage action at least for now.
+                    "*"
+                ]
+            )
+        )
+
+        # Attach the guest role to the identity pool
+        cognito.CfnIdentityPoolRoleAttachment(
+            self, "IdentityPoolRoleAttachment",
+            identity_pool_id=identity_pool.ref,
+            roles={
+                "unauthenticated": website_guest_role.role_arn
+            }
+        )
 
         # Define CI/CD group and policy names
         frontend_group_name = f"{account_type}FrontEndGroup"
@@ -190,15 +237,22 @@ class FrontendConstruct(Construct):
             ],
         )
 
+        # Create the CloudFront Origin Access Identity used for S3 access
+        oai = cloudfront.OriginAccessIdentity(self, "MyOAI",
+            comment="OAI for my CloudFront distribution"
+        )
+
+
         # Create a new CF dist to serve the frontend App over https
         self.distribution = cloudfront.Distribution(
             self,
             "cloudfront_distribution",
             default_behavior=cloudfront.BehaviorOptions(
                 # origin_path restricts CloudFront access to frontend/live S3 data
-                origin=origins.S3StaticWebsiteOrigin(
+                origin= origins.S3BucketOrigin.with_origin_access_identity(
                     frontend_bucket,
-                    origin_path="frontend/live/",
+                    origin_access_identity=oai,
+                    origin_path="frontend/live/"
                 ),
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 # TODO: decide if want to enable/disable caching for S3 bucket updates
@@ -210,7 +264,7 @@ class FrontendConstruct(Construct):
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,
             certificate=self.cloudfront_cert,
             default_root_object="/index.html",
-            comment="CF dist to serve IT S3 frontend content",
+            comment="CF dist to serve Web Team S3 frontend content",
             error_responses=[
                 # Web Team frontend apps uses SPA, so redirects are required
                 # Only 403 redirects needed, 404 never encountered due to bucket policy
@@ -223,6 +277,13 @@ class FrontendConstruct(Construct):
             ],
             web_acl_id=wafacl.attr_arn,
         )
+
+        # Add S3 bucket policy that allows Cloudfront to access the bucket
+        frontend_bucket.add_to_resource_policy(aws_iam.PolicyStatement(
+            actions=["s3:GetObject"],
+            resources=[frontend_bucket.arn_for_objects("*")],
+            principals=[aws_iam.CanonicalUserPrincipal(oai.cloud_front_origin_access_identity_s3_canonical_user_id)]
+        ))
 
         # DNS record for CF -> S3 bucket access
         # May need to wait 5-10 minutes after this record is created
