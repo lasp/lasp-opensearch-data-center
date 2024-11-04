@@ -77,15 +77,15 @@ class FrontendConstruct(Construct):
 
         # Create a Cognito Identity Pool for guest/unauthenticated access - as of 10/2024 no L2 construct available
         identity_pool = cognito.CfnIdentityPool(
-            self, "LiberaITDCWebsiteIdentityPool",
-            identity_pool_name="Libera ITDC Website",
+            self, "WebsiteIdentityPool",
+            identity_pool_name="Website Identity Pool",
             allow_unauthenticated_identities=True,  # Allow unauthenticated access
         )
 
         # Create role for frontend website to pull CW plots
         website_guest_role = aws_iam.Role(
             self, "WebsiteGuestRole",
-            role_name="libera-itdc-website-guest",
+            role_name="website-guest-role",
             assumed_by=aws_iam.FederatedPrincipal(
                 "cognito-identity.amazonaws.com",
                 {
