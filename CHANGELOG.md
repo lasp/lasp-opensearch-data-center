@@ -1,5 +1,9 @@
 # Version Changes
 
+## v1.0.2 (released)
+- Added cognito group for website access
+- Added release documentation
+
 ## v1.0.1 (released)
 - Refactor lambda runtime subpackage into proper python package
 
