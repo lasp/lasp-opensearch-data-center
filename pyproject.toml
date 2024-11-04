@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "lasp_opensearch_data_center"
-version = "1.0.1"
+version = "1.0.2"
 description = "Construct library for creating a CSV ingest pipeline into OpenSearch with a front end website."
 authors = [
     "Gavin Medley <gavin.medley@lasp.colorado.edu>",
-    "Luke Soderquist <luke.soderquist@lasp.colorado.edu>"
+    "Luke Soderquist <luke.soderquist@lasp.colorado.edu>",
+    "Brian McClellan <brian.mcclellan@lasp.colorado.edu>"
 ]
 maintainers = [
     "Gavin Medley <gavin.medley@lasp.colorado.edu>",
