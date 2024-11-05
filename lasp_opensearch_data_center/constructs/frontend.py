@@ -11,6 +11,7 @@ from aws_cdk import (
     aws_wafv2 as wafv2,
     Duration,
     Environment,
+    Tags,
 )
 from constructs import Construct
 
@@ -121,25 +122,30 @@ class FrontendConstruct(Construct):
             }
         )
 
-        # Define CI/CD group and policy names
-        frontend_group_name = f"{account_type}FrontEndGroup"
-        frontend_policy_name = f"{account_type}-frontend-automated-deploy"
+        # Define CI/CD user, role, and policy names
+        frontend_role_name = "jenkins-frontend-deploy-role"
+        frontend_user_name = "jenkins-frontend-deploy-user"
+        frontend_policy_name = "jenkins-frontend-deploy-policy"
 
-        # Create a frontend group, IAM users will be added to this group
-        # via the AWS CLI
-        self.frontend_deployment_group = aws_iam.Group(
-            self, frontend_group_name, group_name=frontend_group_name
+
+        # Create the IAM user
+        jenkins_user = aws_iam.User(self, frontend_user_name, user_name=frontend_user_name)
+
+        # Create the IAM role with a trust policy that allows the specific IAM user to assume it
+        self.frontend_deployment_role = aws_iam.Role(
+            self, frontend_role_name,
+            role_name=frontend_role_name,
+            assumed_by=aws_iam.ArnPrincipal(jenkins_user.user_arn),  # Creates the Trust Relationship with the IAM user
+            description="Role for CI/CD automated frontend deployment"
         )
 
-        # Create the IAM policy to allow S3 access and attach it to the group
+        # Create the IAM policy to allow S3 access and attach it to the role
         self.frontend_iam_policy = aws_iam.ManagedPolicy(
             self,
             frontend_policy_name,
             description="CI CD automated frontend policy",
             managed_policy_name=frontend_policy_name,
-            groups=[
-                self.frontend_deployment_group,
-            ],
+            roles=[self.frontend_deployment_role],
             statements=[
                 aws_iam.PolicyStatement(
                     # Permission to list all S3 buckets
@@ -163,6 +169,9 @@ class FrontendConstruct(Construct):
                 ),
             ],
         )
+
+        # Currently the /frontend object path in the S3 bucket is restricted to entities with this tag
+        Tags.of(self.frontend_deployment_role).add("group", "frontend")
 
         # Create the specific CF cert
         self.cloudfront_cert = acm.Certificate(
