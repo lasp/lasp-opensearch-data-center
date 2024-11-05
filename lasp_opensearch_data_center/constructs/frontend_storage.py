@@ -2,7 +2,6 @@
 from aws_cdk import (
     aws_s3 as s3,
     aws_route53 as route53,
-    aws_iam,
     Environment,
     RemovalPolicy,
 )
@@ -68,29 +67,3 @@ class FrontendStorageConstruct(Construct):
             # This will remove a bucket via the CDK if there are no objects within it
             removal_policy=RemovalPolicy.DESTROY,
         )
-
-        # Restrict puts/deletes to the "frontend/" folder to a specific tag
-        # An IAM user must be generated for the webteam via the AWS CLI
-        # and tagged with group:frontend
-        #
-        # For the DEV account the Web team will put their built JS apps into this object path:
-        # "frontend/libera/live/"
-        # For the PROD account the Web team will put their built JS apps into this versioned object path:
-        # "frontend/libera/VXX/"
-        #
-        # All webteam PUTs will be performed via Jenkins using CLI credentials
-        self.frontend_bucket.add_to_resource_policy(
-            aws_iam.PolicyStatement(
-                effect=aws_iam.Effect.DENY,
-                principals=[aws_iam.AnyPrincipal()],
-                actions=[
-                    "s3:DeleteObject",
-                    "s3:PutObject",
-                ],
-                resources=[
-                    self.frontend_bucket.bucket_arn,
-                    self.frontend_bucket.arn_for_objects("frontend/*"),
-                ],
-                conditions={"StringNotLike": {"aws:PrincipalTag/group": "*frontend*"}},
-            )
-        ),

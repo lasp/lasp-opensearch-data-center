@@ -11,7 +11,6 @@ from aws_cdk import (
     aws_wafv2 as wafv2,
     Duration,
     Environment,
-    Tags,
 )
 from constructs import Construct
 
@@ -123,9 +122,9 @@ class FrontendConstruct(Construct):
         )
 
         # Define CI/CD user, role, and policy names
-        frontend_role_name = "jenkins-frontend-deploy-role"
-        frontend_user_name = "jenkins-frontend-deploy-user"
-        frontend_policy_name = "jenkins-frontend-deploy-policy"
+        frontend_role_name = "frontend-deploy-role"
+        frontend_user_name = "frontend-deploy-user"
+        frontend_policy_name = "frontend-deploy-policy"
 
 
         # Create the IAM user
@@ -169,9 +168,6 @@ class FrontendConstruct(Construct):
                 ),
             ],
         )
-
-        # Currently the /frontend object path in the S3 bucket is restricted to entities with this tag
-        Tags.of(self.frontend_deployment_role).add("group", "frontend")
 
         # Create the specific CF cert
         self.cloudfront_cert = acm.Certificate(
