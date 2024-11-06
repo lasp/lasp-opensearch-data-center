@@ -1,5 +1,8 @@
 # Version Changes
 
+## v1.0.3 (released)
+- Added IAM user, role, policy for frontend deployment user
+
 ## v1.0.2 (released)
 - Added cognito group for website access
 - Added release documentation
