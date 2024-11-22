@@ -168,7 +168,8 @@ class BackendStorageConstruct(Construct):
                     # S3 dropbox bucket and object permissions
                     effect=aws_iam.Effect.ALLOW,
                     actions=[
-                        "s3:*",
+                        "s3:PutObject",
+                        "s3:DeleteObject",
                     ],
                     resources=[
                         self.dropbox_bucket.bucket_arn,
