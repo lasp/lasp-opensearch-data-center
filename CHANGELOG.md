@@ -1,5 +1,8 @@
 # Version Changes
 
+## v1.0.4 (released)
+- Added IAM role and policy for s3 dropbox ingests
+
 ## v1.0.3 (released)
 - Added IAM user, role, policy for frontend deployment user
 
