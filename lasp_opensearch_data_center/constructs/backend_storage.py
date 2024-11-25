@@ -3,6 +3,7 @@
 from constructs import Construct
 from aws_cdk import (
     RemovalPolicy,
+    aws_iam,
     aws_s3 as s3,
     aws_sqs as sqs,
     Duration,
@@ -130,4 +131,50 @@ class BackendStorageConstruct(Construct):
         self.ingest_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
             s3_notify.SqsDestination(self.ingest_queue)
+        )
+
+        # Define the role and policy names to allow CSV files to be uploaded to the S3 dropbox
+        # The user will be created in the AWS Management Console
+        # Permission to assume the role will be granted to the user at the time of creation
+        dropbox_upload_role_name = "dropbox-upload-role"
+        dropbox_upload_policy_name = "dropbox-upload-policy"
+
+        # Create the IAM role
+        self.dropbox_upload_role = aws_iam.Role(
+            self, dropbox_upload_role_name,
+            role_name=dropbox_upload_role_name,
+            description="Role that allows csv file uploads to the S3 dropbox",
+            # Allow any user in this account with the proper permissions, to assume this role
+            assumed_by=aws_iam.AccountRootPrincipal()
+        )
+
+        # Create the IAM policy to allow access to the S3 dropbox bucket
+        self.frontend_iam_policy = aws_iam.ManagedPolicy(
+            self,
+            dropbox_upload_policy_name,
+            description="Dropbox upload policy for csv files",
+            managed_policy_name=dropbox_upload_policy_name,
+            roles=[self.dropbox_upload_role],
+            statements=[
+                aws_iam.PolicyStatement(
+                    # Permission to list all S3 buckets
+                    effect=aws_iam.Effect.ALLOW,
+                    actions=["s3:GetBucketLocation", "s3:ListAllMyBuckets"],
+                    resources=[
+                        "arn:aws:s3:::*",
+                    ],
+                ),
+                aws_iam.PolicyStatement(
+                    # S3 dropbox bucket and object permissions
+                    effect=aws_iam.Effect.ALLOW,
+                    actions=[
+                        "s3:PutObject",
+                        "s3:DeleteObject",
+                    ],
+                    resources=[
+                        self.dropbox_bucket.bucket_arn,
+                        self.dropbox_bucket.bucket_arn + "/*",
+                    ],
+                ),
+            ],
         )
