@@ -209,7 +209,9 @@ class IngestProcessingConstruct(Construct):
             "IngestStatusTable",
             table_name=INGEST_STATUS_TABLE_NAME,
             removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery=True,
+            point_in_time_recovery_specification=ddb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
             # A partition/hash key is required for Dynamo to determine where the data is stored
             partition_key=ddb.Attribute(
                 name=INGEST_STATUS_TABLE_PK, type=ddb.AttributeType.STRING
