@@ -1,7 +1,7 @@
 # Version Changes
 
 ## v1.0.5 (released)
-- Add dedicated manager node to Opensearch
+- Added dedicated manager node to Opensearch
 - Removed depracated DynamoDB CDK construct parameter
 
 ## v1.0.4 (released)
