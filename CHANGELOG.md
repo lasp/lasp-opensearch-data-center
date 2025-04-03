@@ -1,5 +1,9 @@
 # Version Changes
 
+## v1.0.5 (released)
+- Add dedicated manager node to Opensearch
+- Removed depracated DynamoDB CDK construct parameter
+
 ## v1.0.4 (released)
 - Added IAM role and policy for s3 dropbox ingests
 
