@@ -51,10 +51,12 @@ class OpenSearch(Stack):
             certificate=certificate,
             environment=environment,
             opensearch_snapshot_bucket=snapshot_bucket,
-            opensearch_instance_type="t3.medium.search",  # Always use *.search instances for opensearch
             opensearch_version=opensearch.EngineVersion.open_search("2.5"),  # Replace with desired version
             opensearch_zone_awareness=None,
-            opensearch_node_count=1,
+            opensearch_data_node_instance_type="t3.medium.search",  # Always use *.search instances for opensearch
+            opensearch_data_node_count=1,
+            opensearch_manager_node_instance_type="t3.medium.search",
+            opensearch_manager_node_count=1
             opensearch_domain_name="opensearch-testing",  # Name of domain, shows up in console
             opensearch_ip_access_range="10.1.1.1/16",  # Replace with custom IP range to control OpenSearch access
             removal_policy=RemovalPolicy.DESTROY  # Modify this as needed for data persistence requirements
