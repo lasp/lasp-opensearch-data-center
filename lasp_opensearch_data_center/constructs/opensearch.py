@@ -1,8 +1,10 @@
 """Open Search Stack"""
+
 # Standard
 from pathlib import Path
 from typing import Optional
 import warnings
+
 # Installed
 from constructs import Construct
 from aws_cdk import (
@@ -19,10 +21,13 @@ from aws_cdk import (
     aws_lambda as lambda_,
     aws_events as events,
     aws_events_targets as targets,
-    aws_ecr_assets as ecr_assets
+    aws_ecr_assets as ecr_assets,
 )
+
 # Local
-from lasp_opensearch_data_center.constructs.constants import OPENSEARCH_SNAPSHOT_REPO_NAME
+from lasp_opensearch_data_center.constructs.constants import (
+    OPENSEARCH_SNAPSHOT_REPO_NAME,
+)
 
 
 class OpenSearchConstruct(Construct):
@@ -31,27 +36,32 @@ class OpenSearchConstruct(Construct):
     NOTE: This construct takes ~20-40 minutes to deploy/destroy the OpenSearch service.
     Access to the website GUI is available via https://search.{hosted_zone.zone_name}/_dashboards/app/home#/
     """
+
     def __init__(
-            self,
-            scope: Construct,
-            construct_id: str,
-            *,
-            environment: Environment,
-            hosted_zone: route53.HostedZone,
-            certificate: acm.Certificate,
-            opensearch_snapshot_bucket: s3.Bucket,
-            opensearch_domain_name: str,
-            opensearch_instance_type: str = "t3.medium.search",
-            opensearch_version: opensearch.EngineVersion = opensearch.EngineVersion.open_search("2.9"),
-            opensearch_zone_awareness: Optional[opensearch.ZoneAwarenessConfig] = None,
-            opensearch_node_count: int = 1,
-            opensearch_ip_access_range: str = '0.0.0.0/0',
-            snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
-            removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
-            snapshot_lambda: Optional[lambda_.Function] = None,
-            snapshot_schedule: events.Schedule = events.Schedule.cron(
-                    minute="0", hour="9", month="*", week_day="*", year="*"
-                )
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        environment: Environment,
+        hosted_zone: route53.HostedZone,
+        certificate: acm.Certificate,
+        opensearch_snapshot_bucket: s3.Bucket,
+        opensearch_domain_name: str,
+        opensearch_version: opensearch.EngineVersion = opensearch.EngineVersion.open_search(
+            "2.9"
+        ),
+        opensearch_zone_awareness: Optional[opensearch.ZoneAwarenessConfig] = None,
+        opensearch_data_node_instance_type: str = "t3.medium.search",
+        opensearch_data_node_count: int = 1,
+        opensearch_manager_node_instance_type: str = "t3.medium.search",
+        opensearch_manager_node_count: int = 1,
+        opensearch_ip_access_range: str = "0.0.0.0/0",
+        snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
+        removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
+        snapshot_lambda: Optional[lambda_.Function] = None,
+        snapshot_schedule: events.Schedule = events.Schedule.cron(
+            minute="0", hour="9", month="*", week_day="*", year="*"
+        ),
     ) -> None:
         """
         Construct init.
@@ -78,20 +88,29 @@ class OpenSearchConstruct(Construct):
         opensearch_domain_name : str
             Name of the OpenSearch domain, e.g. (`opensearch-testing`). Required to name the OpenSearch Domain
             but does not affect access URLs.
-        opensearch_instance_type : str, optional
-            EC2 instance type on which to run OpenSearch (needs significant resources).
-            Default is `t3.medium.search` to keep costs down on your first deployment.
-            AWS lists supported OpenSearch instance types and recommendations here:
-            https://docs.aws.amazon.com/opensearch-service/latest/developerguide/supported-instance-types.html
         opensearch_version : str, optional
             Version of OpenSearch to deploy, e.g. "2.5". Default is "2.9".
         opensearch_zone_awareness : opensearch.ZoneAwarenessConfig, optional
             AWS can optionally distribute OpenSearch nodes across multiple AZs to increase availability.
             Default is None (no zone awareness).
-        opensearch_node_count : int, optional
-            Number of OpenSearch nodes to deploy. If availability becomes an issue, increasing the number of nodes can help.
-            A rule of thumb is to keep the number of nodes 1:1 with the number of shards configured in your indexes.
-            Default is a single node, used for ingest (write) and read queries.
+        opensearch_data_node_instance_type : str, optional
+            EC2 instance type for OpenSearch data nodes, which handle indexing and searching.
+            These nodes require significant resources.
+            Default is `t3.medium.search` to minimize initial deployment costs.
+            For a full list of supported instance types and recommendations, see:
+            https://docs.aws.amazon.com/opensearch-service/latest/developerguide/supported-instance-types.html
+        opensearch_data_node_count : int, optional
+            Number of OpenSearch data nodes to deploy. More nodes improve availability and performance.
+            A good practice is to match the number of nodes to the number of configured index replicas.
+            Default is a single node, which handles both ingest (writes) and queries (reads).
+        opensearch_manager_node_instance_type : str, optional
+            EC2 instance type for OpenSearch manager nodes, responsible for cluster coordination.
+            Default is `t3.medium.search` to reduce costs for initial deployments.
+            See AWS recommendations for instance types:
+            https://docs.aws.amazon.com/opensearch-service/latest/developerguide/supported-instance-types.html
+        opensearch_manager_node_count : int, optional
+            Number of OpenSearch manager nodes to deploy. Using 3 manager nodes is recommended for production environments
+            to ensure high availability and cluster stability.
         opensearch_ip_access_range : str, optional
             IP CIDR block on which to allow OpenSearch domain access (e.g. for security purposes).
             Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
@@ -110,9 +129,11 @@ class OpenSearchConstruct(Construct):
 
         # User warnings
         if opensearch_ip_access_range == "0.0.0.0/0":
-            warnings.warn("You are creating an OpenSearch cluster that is available to the public internet. If "
-                          "this is what you intended (we think this is unlikely), you can suppress this warning."
-                          "To fix this, change `opensearch_ip_access_range` to a more specific CIDR block spec.")
+            warnings.warn(
+                "You are creating an OpenSearch cluster that is available to the public internet. If "
+                "this is what you intended (we think this is unlikely), you can suppress this warning."
+                "To fix this, change `opensearch_ip_access_range` to a more specific CIDR block spec."
+            )
 
         service_linked_role = CfnResource(
             self,
@@ -134,9 +155,11 @@ class OpenSearchConstruct(Construct):
             # https://docs.aws.amazon.com/opensearch-service/latest/developerguide/supported-instance-types.html
             capacity=opensearch.CapacityConfig(
                 # Num of nodes/instances, for prod should be 1:1 with number of shards created for the indexes
-                data_nodes=int(opensearch_node_count),
+                data_nodes=int(opensearch_data_node_count),
                 # m6g is 2vCPU and 8GB RAM - $100/month per data node
-                data_node_instance_type=opensearch_instance_type,
+                data_node_instance_type=opensearch_data_node_instance_type,
+                master_nodes=int(opensearch_manager_node_count),
+                master_node_instance_type=opensearch_manager_node_instance_type,
             ),
             # 10GB is the minimum size
             ebs=opensearch.EbsOptions(
@@ -159,7 +182,7 @@ class OpenSearchConstruct(Construct):
             custom_endpoint=opensearch.CustomEndpointOptions(
                 domain_name=f"search.{hosted_zone.zone_name}",
                 hosted_zone=hosted_zone,
-                certificate=certificate
+                certificate=certificate,
             ),
             removal_policy=removal_policy,
             # Amazon ES will optionally distribute the nodes and shards across multiple Availability Zones
@@ -238,11 +261,13 @@ class OpenSearchConstruct(Construct):
         if snapshot_lambda is None:
             # The lambda directory is considered a data directory for the package and is packaged along with the
             # python code during distribution.
-            docker_context_path = str((Path(__file__).parent.parent / "lambda").absolute())
+            docker_context_path = str(
+                (Path(__file__).parent.parent / "lambda").absolute()
+            )
             docker_image_code = lambda_.DockerImageCode.from_image_asset(
                 directory=docker_context_path,
                 target="snapshot-lambda",  # Hard-coded to the target name in lambda/Dockerfile
-                platform=ecr_assets.Platform.LINUX_AMD64
+                platform=ecr_assets.Platform.LINUX_AMD64,
             )
 
             snapshot_lambda = lambda_.DockerImageFunction(
@@ -287,6 +312,6 @@ class OpenSearchConstruct(Construct):
             "Rule",
             rule_name="SnapshotLambdaScheduler",
             description="Scheduler to trigger the OpenSearch Lambda snapshot function",
-            schedule=snapshot_schedule
+            schedule=snapshot_schedule,
         )
         snapshot_lambda_event_rule.add_target(targets.LambdaFunction(snapshot_lambda))
