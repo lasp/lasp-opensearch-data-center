@@ -72,8 +72,9 @@ jobs:
       # Metadata false to override new error released in early 2025
       # TODO: official fix
       - name: Publish distribution artifacts 📦 to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.8.10
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          verify_metadata: false
           verify-metadata: false
 
   # Job that pushes dist artifacts to TestPyPI for test release tags
