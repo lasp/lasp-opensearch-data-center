@@ -10,6 +10,8 @@ from aws_cdk import (
     aws_s3_notifications as s3_notify,
 )
 
+from aws_cdk.aws_s3 import NotificationKeyFilter
+
 
 class BackendStorageConstruct(Construct):
     """Construct containing standard resources used by the data center back end, including notification mechanisms
@@ -102,7 +104,8 @@ class BackendStorageConstruct(Construct):
         # Send files from dropbox bucket into SQS
         self.dropbox_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
-            s3_notify.SqsDestination(self.dropbox_queue)
+            s3_notify.SqsDestination(self.dropbox_queue),
+            s3.NotificationKeyFilter(prefix="received_files/")
         )
 
         # Create DLQ
