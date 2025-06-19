@@ -1,5 +1,8 @@
 # Version Changes
 
+## v1.0.6 (released)
+- Changed Dropbox to only send out notifications to the SQS for files in the "received-fles" folder. 
+
 ## v1.0.5 (released)
 - Added dedicated manager node(s) to Opensearch
 - Removed deprecated DynamoDB CDK construct parameter
