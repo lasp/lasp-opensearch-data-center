@@ -1,5 +1,8 @@
 # Version Changes
 
+## v1.0.7 (released)
+- Allow for configuration of the opensearch instance size in the construct
+
 ## v1.0.6 (released)
 - Changed Dropbox to only send out notifications to the SQS for files in the "received-fles" folder. 
 
