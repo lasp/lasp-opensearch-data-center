@@ -166,7 +166,7 @@ class OpenSearchConstruct(Construct):
             ),
             # 10GB is the minimum size
             ebs=opensearch.EbsOptions(
-                volume_size=50,
+                volume_size=opensearch_volume_size,
                 volume_type=ec2.EbsDeviceVolumeType.GP3,
             ),
             # Enable logging
