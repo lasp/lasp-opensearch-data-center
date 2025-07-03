@@ -117,7 +117,7 @@ class OpenSearchConstruct(Construct):
             Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
             is available to the public internet.
         opensearch_volume_size : int, optional
-            The size, in GB, of the OpenSearch domain's underlying EBS storage. 
+            The size, in GB, of the OpenSearch domain's underlying EBS storage.
         snapshot_repo_name : str, optional
             Name of the snapshot repository (used by OpenSearch to name the snapshots written to the snapshot bucket).
             Default is "opensearch-snapshot-repo".
