@@ -56,6 +56,7 @@ class OpenSearchConstruct(Construct):
         opensearch_manager_node_instance_type: str = "t3.medium.search",
         opensearch_manager_node_count: int = 1,
         opensearch_ip_access_range: str = "0.0.0.0/0",
+        opensearch_volume_size: int = 50,
         snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
         removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
         snapshot_lambda: Optional[lambda_.Function] = None,
@@ -115,6 +116,8 @@ class OpenSearchConstruct(Construct):
             IP CIDR block on which to allow OpenSearch domain access (e.g. for security purposes).
             Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
             is available to the public internet.
+        opensearch_volume_size : int, optional
+            The size, in GB, of the OpenSearch domain's underlying EBS storage. Default is 50GB. 
         snapshot_repo_name : str, optional
             Name of the snapshot repository (used by OpenSearch to name the snapshots written to the snapshot bucket).
             Default is "opensearch-snapshot-repo".
@@ -163,7 +166,7 @@ class OpenSearchConstruct(Construct):
             ),
             # 10GB is the minimum size
             ebs=opensearch.EbsOptions(
-                volume_size=50,
+                volume_size=opensearch_volume_size,
                 volume_type=ec2.EbsDeviceVolumeType.GP3,
             ),
             # Enable logging
