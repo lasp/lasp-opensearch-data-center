@@ -56,7 +56,7 @@ class OpenSearchConstruct(Construct):
         opensearch_manager_node_instance_type: str = "t3.medium.search",
         opensearch_manager_node_count: int = 1,
         opensearch_ip_access_range: str = "0.0.0.0/0",
-        opensearch_volume_size: int = opensearch_volume_size,
+        opensearch_volume_size: int = 50,
         snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
         removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
         snapshot_lambda: Optional[lambda_.Function] = None,
