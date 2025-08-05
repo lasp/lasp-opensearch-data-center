@@ -145,6 +145,7 @@ class IngestProcessingConstruct(Construct):
             DropboxLambdaEnv.DROPBOX_BUCKET_NAME: dropbox_bucket.bucket_name,
             DropboxLambdaEnv.INGEST_BUCKET_NAME: ingest_bucket.bucket_name,
             DropboxLambdaEnv.CONSOLE_LOG_LEVEL: "INFO",
+            DropboxLambdaEnv.MAX_FILE_SIZE_MB: "100",
         }
         if dropbox_lambda_env:
             # Update the default environment variables with the user specified environment variables
