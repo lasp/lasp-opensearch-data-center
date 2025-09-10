@@ -55,7 +55,7 @@ class OpenSearchConstruct(Construct):
         opensearch_data_node_count: int = 1,
         opensearch_manager_node_instance_type: str = "t3.medium.search",
         opensearch_manager_node_count: int = 1,
-        opensearch_ip_access_range: str = "0.0.0.0/0",
+        opensearch_ip_access_range: list[str] = ["0.0.0.0/0"],
         opensearch_volume_size: int = 50,
         snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
         removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
@@ -112,8 +112,8 @@ class OpenSearchConstruct(Construct):
         opensearch_manager_node_count : int, optional
             Number of OpenSearch manager nodes to deploy. Using 3 manager nodes is recommended for production environments
             to ensure high availability and cluster stability.
-        opensearch_ip_access_range : str, optional
-            IP CIDR block on which to allow OpenSearch domain access (e.g. for security purposes).
+        opensearch_ip_access_range : list[str], optional
+            List of IP CIDR blocks on which to allow OpenSearch domain access (e.g. for security purposes).
             Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
             is available to the public internet.
         opensearch_volume_size : int, optional
@@ -131,7 +131,7 @@ class OpenSearchConstruct(Construct):
         super().__init__(scope, construct_id)
 
         # User warnings
-        if opensearch_ip_access_range == "0.0.0.0/0":
+        if "0.0.0.0/0" in opensearch_ip_access_range:
             warnings.warn(
                 "You are creating an OpenSearch cluster that is available to the public internet. If "
                 "this is what you intended (we think this is unlikely), you can suppress this warning."
