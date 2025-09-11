@@ -114,7 +114,7 @@ class OpenSearchConstruct(Construct):
             to ensure high availability and cluster stability.
         opensearch_ip_access_range : list[str], optional
             List of IP CIDR blocks on which to allow OpenSearch domain access (e.g. for security purposes).
-            Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
+            Default is ["0.0.0.0/0"] (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
             is available to the public internet.
         opensearch_volume_size : int, optional
             The size, in GB, of the OpenSearch domain's underlying EBS storage. Default is 50GB. 
