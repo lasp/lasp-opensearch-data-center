@@ -67,7 +67,7 @@ class BackendStorageConstruct(Construct):
             "OSSnapshotBucket",
             bucket_name=opensearch_snapshot_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+            versioned=False,
             lifecycle_rules=[
                 # Define the lifecycle rule to delete objects after 90 days
                 s3.LifecycleRule(
