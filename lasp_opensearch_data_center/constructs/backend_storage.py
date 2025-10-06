@@ -48,7 +48,7 @@ class BackendStorageConstruct(Construct):
             "DropboxBucket",
             bucket_name=dropbox_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+            versioned=False,
         )
 
         # INGEST BUCKET for all pre-processed objects
@@ -57,7 +57,7 @@ class BackendStorageConstruct(Construct):
             "IngestBucket",
             bucket_name=ingest_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+            versioned=False,
         )
 
         # S3 bucket to store the snapshot data
