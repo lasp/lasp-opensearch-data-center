@@ -103,7 +103,7 @@ class OpenSearchServerlessConstruct(Construct):
             "SourceVPCEs": [self.vpc_endpoint.vpc_endpoint_id]
         })
 
-        # Add rules for public CIDR-restricted access (if CIDRs are provided)
+        # Add rules for public CIDR-restricted access
         network_rules.append({
             "ResourceType": "collection",
             "Resource": [f"collection/{collection_name}"],
