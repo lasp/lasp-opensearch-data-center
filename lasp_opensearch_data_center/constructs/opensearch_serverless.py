@@ -66,20 +66,6 @@ class OpenSearchServerlessConstruct(Construct):
             }])
         )
 
-        access_policy = opensearch.CfnAccessPolicy(
-            self, "OpenSearchServerless-access-policy",
-            name= "liberaitdc-access-policy",
-            type="data",
-            policy=json.dumps([{
-                "Rules": [{
-                    "ResourceType": "index",
-                    "Resource": [f"index/{collection_name}/*"],
-                    "Permission": ["aoss:CreateIndex", "aoss:ReadDocument", "aoss:WriteDocument", "aoss:UpdateIndex", "aoss:DeleteIndex", "aoss:DescribeIndex"] #TODO might need to add some more privileges 
-                }],
-                "Principal":[f"arn:aws:iam::983496429036:root"] #TODO probably need to restrict this further to specific IAM roles/users
-            }])
-        )
-
         # Create the new collection
         self.collection = opensearch.CfnCollection( 
             self, "OpenSearchServerlessCollection",
@@ -90,19 +76,120 @@ class OpenSearchServerlessConstruct(Construct):
         # attach policies to collection
         self.collection.add_dependency(encryption_policy)
         self.collection.add_dependency(network_policy)
-        self.collection.add_dependency(access_policy)
 
-    @property
-    def domain_name(self) -> str:
-        """Return collection ID to maintain compatibility with provisioned OpenSearch"""
-        return self.collection.attr_id  # or self.collection.collection_name
+
+        self.collection_name = collection_name
+
+        self.domain_endpoint = self.collection.attr_collection_endpoint
+        self.domain_name = collection_name
+        self.domain_arn = self.collection.attr_arn
+
+        # Track principals that need access
+        self.read_write_principals: List[str] = []
+        self.read_write_principals.append("arn:aws:iam::983496429036:root") #TODO for testing, need a better way to allow people with AWS conolse access to view the serverless cluster (and the dashboard)
+
+    def grant_read_write(self, identity: iam.IGrantable) -> None:
+        """
+        Grant read and write access to indexes in the collection.
+        This is the main method for granting Lambda functions access.
+        
+        Parameters
+        ----------
+        identity : iam.IGrantable
+            The Lambda function or other IAM principal to grant access to
+        """
+        # Extract the role ARN from the grantable identity
+        principal_arn = self._get_principal_arn(identity)
+        
+        # Add to our tracking list
+        if principal_arn not in self.read_write_principals:
+            self.read_write_principals.append(principal_arn)
+        
+        # Grant the IAM principal permission to use AOSS APIs
+        identity.grant_principal.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "aoss:APIAccessAll",  # General API access
+                    "aoss:*"  # All OpenSearch Serverless actions
+                ],
+                resources=[self.collection.attr_arn],
+                effect=iam.Effect.ALLOW
+            )
+        )
     
-    @property
-    def domain_endpoint(self) -> str:
-        """Return the collection endpoint"""
-        return self.collection.attr_collection_endpoint
+    def create_access_policy(self) -> None:
+        """
+        Create and attach the data access policy for the collection.
+        This should be called after all principals have been granted access via grant_read_write().
+        The policy will be created with all principals that were added to read_write_principals.
+        """
+        if not self.read_write_principals:
+            raise ValueError(
+                "No principals have been granted access. Call grant_read_write() before creating the access policy."
+            )
+        
+        access_policy = opensearch.CfnAccessPolicy(
+            self, "OpenSearchServerless-access-policy",
+            name="liberaitdc-access-policy",
+            type="data",
+            policy=json.dumps([{
+                "Rules": [{
+                    "ResourceType": "collection",
+                    "Resource": [f"collection/{self.collection_name}"],
+                    "Permission": [
+                        "aoss:CreateCollectionItems",
+                        "aoss:UpdateCollectionItems",
+                        "aoss:DescribeCollectionItems"
+                    ]
+                }, {
+                    "ResourceType": "index",
+                    "Resource": [f"index/{self.collection_name}/*"],
+                    "Permission": [
+                        "aoss:CreateIndex",
+                        "aoss:ReadDocument",
+                        "aoss:WriteDocument",
+                        "aoss:UpdateIndex",
+                        "aoss:DeleteIndex",
+                        "aoss:DescribeIndex"
+                    ]
+                }],
+                "Principal": self.read_write_principals
+            }])
+        )
+        
+        # Make collection depend on access policy
+        self.collection.add_dependency(access_policy)
     
-    @property
-    def domain_arn(self) -> str:
-        """Return the collection ARN"""
-        return self.collection.attr_arn
+    def _get_principal_arn(self, identity: iam.IGrantable) -> str:
+        """
+        Extract the ARN from an IGrantable identity.
+        
+        Parameters
+        ----------
+        identity : iam.IGrantable
+            The identity to extract the ARN from
+            
+        Returns
+        -------
+        str
+            The ARN of the principal (role or user)
+        """
+        principal = identity.grant_principal
+        
+        # Check if it's a role
+        if hasattr(principal, 'role_arn'):
+            return principal.role_arn
+        
+        # Check if it's an assumed role principal (from sts)
+        if hasattr(principal, 'assumed_role_arn'):
+            return principal.assumed_role_arn
+        
+        # Check if it has an arn attribute
+        if hasattr(principal, 'arn'):
+            return principal.arn
+        
+        # If we can't extract the ARN, raise an error
+        raise ValueError(
+            f"Unable to extract principal ARN from {type(principal).__name__}. "
+            f"The identity must have a 'role_arn', 'assumed_role_arn', or 'arn' attribute."
+        )
