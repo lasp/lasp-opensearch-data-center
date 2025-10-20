@@ -20,8 +20,6 @@ class OpenSearchServerlessConstruct(Construct):
         self, 
         scope: Construct,
         construct_id: str,
-        vpc: ec2.IVpc,
-        opensearch_ip_access_range: Optional[List[str]] = ["0.0.0.0/0"],
     ) -> None:
         """
         Construct init.
@@ -31,47 +29,11 @@ class OpenSearchServerlessConstruct(Construct):
             The scope in which this Construct is instantiated, usually the `self` inside a Stack.
         construct_id : str
             ID for this construct instance, e.g. "MyOpenSearchConstruct".
-        vpc: ec2.vpc
-    
-            TODO ADD PARAM DESCRIPTION HERE
-        
-        opensearch_ip_access_range : List[str], optional
-            IP CIDR block on which to allow OpenSearch domain access (e.g. for security purposes).
-            Default is 0.0.0.0/0 (open everywhere). Note: leaving this unchanged will raise a warning that your cluster
-            is available to the public internet.
         """
 
         super().__init__(scope, construct_id)
 
         collection_name="liberaITDC-collection"
-        self.vpc = vpc
-        self.allowed_cidrs = opensearch_ip_access_range
-
-
-        # Create a security group for the OpenSearch Serverless VPC endpoint
-        endpoint_sg = ec2.SecurityGroup(
-            self, "OpenSearchEndpointSG",
-            vpc=self.vpc,
-            allow_all_outbound=True,
-        )
-
-        # Add ingress rules for each allowed CIDR range
-        for cidr in self.allowed_cidrs:
-            endpoint_sg.add_ingress_rule(
-                peer=ec2.Peer.ipv4(cidr),
-                connection=ec2.Port.tcp(443),
-                description=f"Allow HTTPS from {cidr}"
-            )
-
-        # Create the VPC endpoint for OpenSearch Serverless
-        self.vpc_endpoint = ec2.InterfaceVpcEndpoint(
-            self, "OpenSearchServerlessVpcEndpoint",
-            vpc=self.vpc,
-            service=ec2.InterfaceVpcEndpointAwsService.OPENSEARCH_SERVERLESS,
-            subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED),  # Use isolated subnets for private access
-            security_groups=[endpoint_sg],
-            private_dns_enabled=True,  # Enables private DNS resolution within the VPC TODO is this needed?
-        )
 
         # Create the policies for the collection
         encryption_policy = opensearch.CfnSecurityPolicy(
@@ -89,33 +51,17 @@ class OpenSearchServerlessConstruct(Construct):
 
         network_rules = []
 
-        # Add rules for private VPC access (collection and dashboard)
         network_rules.append({
             "ResourceType": "collection",
             "Resource": [f"collection/{collection_name}"],
-            "AllowFromPublic": False,
-            "SourceVPCEs": [self.vpc_endpoint.vpc_endpoint_id]
+            "AllowFromPublic": True
         })
         network_rules.append({
             "ResourceType": "dashboard",
             "Resource": [f"collection/{collection_name}"],
-            "AllowFromPublic": False,
-            "SourceVPCEs": [self.vpc_endpoint.vpc_endpoint_id]
+            "AllowFromPublic": True
         })
 
-        # Add rules for public CIDR-restricted access
-        network_rules.append({
-            "ResourceType": "collection",
-            "Resource": [f"collection/{collection_name}"],
-            "AllowFromPublic": True,
-            "SourceCIDRs": self.allowed_cidrs
-        })
-        network_rules.append({
-            "ResourceType": "dashboard",
-            "Resource": [f"collection/{collection_name}"],
-            "AllowFromPublic": True,
-            "SourceCIDRs": self.allowed_cidrs
-        })
 
         network_policy = opensearch.CfnSecurityPolicy(
             self, "OpenSearchServerless-network-policy",
