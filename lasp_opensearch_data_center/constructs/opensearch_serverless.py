@@ -33,55 +33,51 @@ class OpenSearchServerlessConstruct(Construct):
 
         super().__init__(scope, construct_id)
 
-        collection_name="liberaITDC-collection"
+        collection_name="liberaitdc-collection"
 
         # Create the policies for the collection
         encryption_policy = opensearch.CfnSecurityPolicy(
             self, "OpenSearchServerless-encryption-policy",
-            name="liberaITDC-encryption-policy",
+            name="liberaitdc-encryption-policy",
             type="encryption",
-            policy=json.dumps([
-                {
+            policy=json.dumps({
+                "Rules": [{
                     "ResourceType": "collection",
-                    "Resource": [f"collection/{collection_name}"],
-                    "AWSOwnedKey": True
-                }
-            ])
+                    "Resource": [f"collection/{collection_name}"]
+                }],
+                "AWSOwnedKey": True
+            })
         )
-
-        network_rules = []
-
-        network_rules.append({
-            "ResourceType": "collection",
-            "Resource": [f"collection/{collection_name}"],
-            "AllowFromPublic": True
-        })
-        network_rules.append({
-            "ResourceType": "dashboard",
-            "Resource": [f"collection/{collection_name}"],
-            "AllowFromPublic": True
-        })
 
 
         network_policy = opensearch.CfnSecurityPolicy(
             self, "OpenSearchServerless-network-policy",
-            name="liberaITDC-network-policy",
+            name="liberaitdc-network-policy",
             type="network",
-            policy=json.dumps(network_rules)
+            policy=json.dumps([{
+                "Rules": [{
+                    "ResourceType": "collection",
+                    "Resource": [f"collection/{collection_name}"]
+                }, {
+                    "ResourceType": "dashboard",
+                    "Resource": [f"collection/{collection_name}"]
+                }],
+                "AllowFromPublic": True
+            }])
         )
 
         access_policy = opensearch.CfnAccessPolicy(
             self, "OpenSearchServerless-access-policy",
-            name= "liberaITDC-access-policy",
+            name= "liberaitdc-access-policy",
             type="data",
-            policy=json.dumps({
+            policy=json.dumps([{
                 "Rules": [{
                     "ResourceType": "index",
                     "Resource": [f"index/{collection_name}/*"],
-                    "Permission": ["aoss:CreateIndex", "aoss:ReadDocument", "aoss:WriteDocument"] #TODO might need to add some more privileges 
+                    "Permission": ["aoss:CreateIndex", "aoss:ReadDocument", "aoss:WriteDocument", "aoss:UpdateIndex", "aoss:DeleteIndex", "aoss:DescribeIndex"] #TODO might need to add some more privileges 
                 }],
-                "Principal":[iam.AnyPrincipal()] #TODO probably need to restrict this further
-            })
+                "Principal":[f"arn:aws:iam::983496429036:root"] #TODO probably need to restrict this further to specific IAM roles/users
+            }])
         )
 
         # Create the new collection
@@ -95,3 +91,18 @@ class OpenSearchServerlessConstruct(Construct):
         self.collection.add_dependency(encryption_policy)
         self.collection.add_dependency(network_policy)
         self.collection.add_dependency(access_policy)
+
+    @property
+    def domain_name(self) -> str:
+        """Return collection ID to maintain compatibility with provisioned OpenSearch"""
+        return self.collection.attr_id  # or self.collection.collection_name
+    
+    @property
+    def domain_endpoint(self) -> str:
+        """Return the collection endpoint"""
+        return self.collection.attr_collection_endpoint
+    
+    @property
+    def domain_arn(self) -> str:
+        """Return the collection ARN"""
+        return self.collection.attr_arn
