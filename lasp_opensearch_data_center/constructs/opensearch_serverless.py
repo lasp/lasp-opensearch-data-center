@@ -6,9 +6,10 @@ from typing import Optional, List
 from constructs import Construct
 from aws_cdk import (
     aws_route53 as route53,
+    aws_route53_targets as targets,
     aws_certificatemanager as acm,
-    RemovalPolicy,
-    Environment,
+    aws_cloudfront as cloudfront,
+    aws_cloudfront_origins as origins,
     aws_iam as iam,
     aws_opensearchserverless as opensearch,
     aws_ec2 as ec2
@@ -21,6 +22,10 @@ class OpenSearchServerlessConstruct(Construct):
         scope: Construct,
         construct_id: str,
         collection_name: str,
+        domain_name: str,
+        hosted_zone: route53.IHostedZone,
+        certificate_arn: str,
+        allowed_ip_ranges: Optional[List[str]] = None,
         standby_replicas: Optional[bool] = True
     ) -> None:
         """
@@ -33,12 +38,29 @@ class OpenSearchServerlessConstruct(Construct):
             ID for this construct instance, e.g. "MyOpenSearchConstruct".
         collection_name : str
             The name of the OpenSearch Serverless collection
+        domain_name : str,
+            The domain that will be used to access the OpenSearch Dashboard
+        hosted_zone : route53.IHostedZone
+            The Route53 hosted zone for your custom domain
+        certificate_arn : str
+           The ARN of the ACM certificate (must be in us-east-1)
+        allowed_ip_ranges : Optional[List[str]]
+            List of IP ranges in CIDR notation that are allowed to access the dashboard.
+            If None, all IPs are allowed.
         standby_replicas : Optional[bool]
             Indicates whether to use standby replicas for the collection. You can't update this property 
             after the collection is already created.
         """
 
+
+        #Custom domain and IP restricton plan
+        # need r53, domain name, and acm cert
+        # create cloud frount dist
+        # attach AWS WAF IP restriction
+        # add an a name record to R53 and point it to cloud front
         super().__init__(scope, construct_id)
+
+
 
         self.collection_name=collection_name
 
@@ -88,13 +110,47 @@ class OpenSearchServerlessConstruct(Construct):
         self.collection.add_dependency(network_policy)
 
         self.domain_endpoint = self.collection.attr_collection_endpoint
-        self.domain_name = collection_name
+        self.domain_name = domain_name
         self.domain_arn = self.collection.attr_arn
+        self.dashboard_endpoint = self.collection.attr_dashboard_endpoint
+
 
         # Track principals that need access
         self.read_write_principals: List[str] = []
         self.read_write_principals.append("arn:aws:iam::983496429036:root") #TODO for testing, need a better way to allow people with AWS conolse access to view the serverless cluster (and the dashboard)
 
+
+        # setup up networking stuff
+        ssl_cert =  acm.Certificate.from_certificate_arn(
+            self, "DashboardCertificate", certificate_arn
+        )
+
+        cf_dist = cloudfront.Distribution(
+            self, "DashboardDistribution",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=origins.HttpOrigin(
+                    domain_name=self.dashboard_endpoint.replace("https://", "").replace("http://", ""),
+                    origin_ssl_protocols=[cloudfront.OriginSslPolicy.TLS_V1_2],
+                    protocol_policy=cloudfront.OriginProtocolPolicy.HTTPS_ONLY
+                ),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            ),
+            domain_names=[str(domain_name)],
+            certificate=ssl_cert,
+            default_root_object="",  # dashboard root handled by OpenSearch
+        )
+
+        # Create a Route 53 alias record for your custom domain
+        route53.ARecord(
+            self, "DashboardAliasRecord",
+            zone=hosted_zone,
+            record_name=domain_name.split(".")[0],  #TODO this assume the endpoint for the dashboard is "dashboard.customdomain.com"
+            target=route53.RecordTarget.from_alias(
+                targets.CloudFrontTarget(cf_dist)
+            ),
+        )
     def grant_read_write(self, identity: iam.IGrantable) -> None:
         """
         Grant read and write access to indexes in the collection.
