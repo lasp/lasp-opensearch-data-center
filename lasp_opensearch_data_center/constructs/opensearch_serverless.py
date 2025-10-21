@@ -20,6 +20,8 @@ class OpenSearchServerlessConstruct(Construct):
         self, 
         scope: Construct,
         construct_id: str,
+        collection_name: str,
+        standby_replicas: Optional[bool] = True
     ) -> None:
         """
         Construct init.
@@ -29,11 +31,16 @@ class OpenSearchServerlessConstruct(Construct):
             The scope in which this Construct is instantiated, usually the `self` inside a Stack.
         construct_id : str
             ID for this construct instance, e.g. "MyOpenSearchConstruct".
+        collection_name : str
+            The name of the OpenSearch Serverless collection
+        standby_replicas : Optional[bool]
+            Indicates whether to use standby replicas for the collection. You can't update this property 
+            after the collection is already created.
         """
 
         super().__init__(scope, construct_id)
 
-        collection_name="liberaitdc-collection"
+        self.collection_name=collection_name
 
         # Create the policies for the collection
         encryption_policy = opensearch.CfnSecurityPolicy(
@@ -43,7 +50,7 @@ class OpenSearchServerlessConstruct(Construct):
             policy=json.dumps({
                 "Rules": [{
                     "ResourceType": "collection",
-                    "Resource": [f"collection/{collection_name}"]
+                    "Resource": [f"collection/{self.collection_name}"]
                 }],
                 "AWSOwnedKey": True
             })
@@ -57,28 +64,28 @@ class OpenSearchServerlessConstruct(Construct):
             policy=json.dumps([{
                 "Rules": [{
                     "ResourceType": "collection",
-                    "Resource": [f"collection/{collection_name}"]
+                    "Resource": [f"collection/{self.collection_name}"]
                 }, {
                     "ResourceType": "dashboard",
-                    "Resource": [f"collection/{collection_name}"]
+                    "Resource": [f"collection/{self.collection_name}"]
                 }],
                 "AllowFromPublic": True
             }])
         )
 
+        enable_replicas = "ENABLED" if standby_replicas else "DISABLED"
+
         # Create the new collection
         self.collection = opensearch.CfnCollection( 
             self, "OpenSearchServerlessCollection",
-            name=collection_name,
+            name=self.collection_name,
             type="SEARCH",
+            standby_replicas=enable_replicas,
         )
         
         # attach policies to collection
         self.collection.add_dependency(encryption_policy)
         self.collection.add_dependency(network_policy)
-
-
-        self.collection_name = collection_name
 
         self.domain_endpoint = self.collection.attr_collection_endpoint
         self.domain_name = collection_name
