@@ -1,0 +1,17 @@
+{
+	"name": "LASP OpenSearch Data Center Dev Container",
+	"image": "mcr.microsoft.com/devcontainers/python:0-3.11",
+	"features": {
+		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/devcontainers/features/aws-cli:1": {}
+	},
+	"postCreateCommand": "npm install -g aws-cdk && poetry install",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance"
+			]
+		}
+	}
+}
