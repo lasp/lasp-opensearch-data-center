@@ -55,7 +55,7 @@ class OpenSearchConstruct(Construct):
         opensearch_data_node_count: int = 1,
         opensearch_manager_node_instance_type: str = "t3.medium.search",
         opensearch_manager_node_count: int = 1,
-        opensearch_ip_access_range: list[str] = ["0.0.0.0/0"],
+        opensearch_ip_access_range: list[str] = ["127.0.0.1/32"],
         opensearch_volume_size: int = 50,
         snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
         removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
@@ -131,9 +131,9 @@ class OpenSearchConstruct(Construct):
         super().__init__(scope, construct_id)
 
         # User warnings
-        if "0.0.0.0/0" in opensearch_ip_access_range:
+        if "127.0.0.1/32" in opensearch_ip_access_range and len(opensearch_ip_access_range) == 0:
             warnings.warn(
-                "You are creating an OpenSearch cluster that is available to the public internet. If "
+                "You didn't specify an IP range, now no one can access your opensearch! If "
                 "this is what you intended (we think this is unlikely), you can suppress this warning."
                 "To fix this, change `opensearch_ip_access_range` to a more specific CIDR block spec."
             )
