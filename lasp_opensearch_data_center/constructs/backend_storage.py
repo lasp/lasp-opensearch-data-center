@@ -26,7 +26,7 @@ class BackendStorageConstruct(Construct):
             dropbox_bucket_name: str,
             ingest_bucket_name: str,
             opensearch_snapshot_bucket_name: str,
-            enable_bucket_versioning: bool= False
+            enable_bucket_versioning: bool = False
     ) -> None:
         """Construct init
 
