@@ -1,0 +1,12 @@
+site_name: LASP OpenSearch Data Center
+nav:
+    - Home: index.md
+    - Release Process: release_process.md
+    - "Construct Usage":
+        - "Backend Storage": "construct_usage/backend_storage.md"
+        - "Certificate": "construct_usage/certificate.md"
+        - "Frontend": "construct_usage/frontend.md"
+        - "Frontend Storage": "construct_usage/frontend_storage.md"
+        - "Ingest Orchestration": "construct_usage/ingest_orchestration.md"
+        - "Networking": "construct_usage/networking.md"
+        - "OpenSearch": "construct_usage/opensearch.md"
