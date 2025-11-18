@@ -26,6 +26,7 @@ class BackendStorageConstruct(Construct):
             dropbox_bucket_name: str,
             ingest_bucket_name: str,
             opensearch_snapshot_bucket_name: str,
+            enable_bucket_versioning: bool = False
     ) -> None:
         """Construct init
 
@@ -39,6 +40,8 @@ class BackendStorageConstruct(Construct):
             Name of the ingest storage bucket
         :param opensearch_snapshot_bucket_name: str
             Name of the bucket used to store opensearch index snapshots
+        :param enable_bucket_versioning: bool
+            Set to true to allow versioning for all backend storage buckets. Defaults to false.
         """
         super().__init__(scope, construct_id)
 
@@ -48,7 +51,7 @@ class BackendStorageConstruct(Construct):
             "DropboxBucket",
             bucket_name=dropbox_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+            versioned=enable_bucket_versioning,
         )
 
         # INGEST BUCKET for all pre-processed objects
@@ -57,7 +60,7 @@ class BackendStorageConstruct(Construct):
             "IngestBucket",
             bucket_name=ingest_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+            versioned=enable_bucket_versioning,
         )
 
         # S3 bucket to store the snapshot data
@@ -67,7 +70,7 @@ class BackendStorageConstruct(Construct):
             "OSSnapshotBucket",
             bucket_name=opensearch_snapshot_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
-            versioned=True,
+            versioned=enable_bucket_versioning,
             lifecycle_rules=[
                 # Define the lifecycle rule to delete objects after 90 days
                 s3.LifecycleRule(
