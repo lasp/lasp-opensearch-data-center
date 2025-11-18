@@ -145,6 +145,7 @@ class IngestProcessingConstruct(Construct):
             DropboxLambdaEnv.DROPBOX_BUCKET_NAME: dropbox_bucket.bucket_name,
             DropboxLambdaEnv.INGEST_BUCKET_NAME: ingest_bucket.bucket_name,
             DropboxLambdaEnv.CONSOLE_LOG_LEVEL: "INFO",
+            DropboxLambdaEnv.MAX_FILE_SIZE_MB: "30",
         }
         if dropbox_lambda_env:
             # Update the default environment variables with the user specified environment variables
@@ -249,7 +250,7 @@ class IngestProcessingConstruct(Construct):
             IngestLambdaEnv.CHUNK_SIZE_MB: "5",
             IngestLambdaEnv.GENERATE_IDS: "1",
             IngestLambdaEnv.MAX_PROCESSES: "25",
-            IngestLambdaEnv.MAX_FILE_SIZE_MB: "100",
+            IngestLambdaEnv.MAX_FILE_SIZE_MB: "30",
             IngestLambdaEnv.OPENSEARCH_CLIENT_REQUEST_TIMEOUT: "60",
         }
         if ingest_lambda_env:
