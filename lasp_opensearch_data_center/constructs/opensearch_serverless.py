@@ -15,28 +15,35 @@ from aws_cdk import (
     CustomResource,
     Duration,
     Stack,
-    Fn
 )
-"""NEW FLOW USING VPCs WITH SECURITY GROUP IP FILTERING
-1. User hits public NLB endpoint (or custom domain via Route53)
-2. NLB security group checks if source IP is allowed
-3. Allowed traffic forwarded to VPC endpoint
-4. VPC endpoint routes to OpenSearch Serverless collection
+"""OPENSEARCH SERVERLESS WITH IP-RESTRICTED ACCESS VIA NLB
+Architecture Flow:
+1. User (with allowed IP) hits public NLB endpoint (or custom domain via Route53)
+2. NLB forwards traffic to VPC endpoint (NLB does not support security groups)
+3. VPC endpoint security group enforces:
+   - IP allowlist (allowed_ips parameter)
+   - NLB subnet CIDR ranges (to accept traffic from NLB)
+4. Allowed traffic reaches OpenSearch Serverless collection
 5. User accesses OpenSearch dashboards
 
+Security Model:
+- IP-based access control enforced at VPC endpoint security group
+- Only specified IPs in allowlist can access
+- Only traffic from NLB subnets accepted (prevents VPC bypass)
+- No broad VPC CIDR access
+- VPC-only collection (no public access)
 """
 
 
 class OpenSearchServerlessConstruct(Construct):
     """
-    OpenSearch Serverless construct with security group-based IP access control.
+    OpenSearch Serverless construct with VPC endpoint security group-based IP access control.
     
-    Architecture Flow:
-    1. User hits public NLB endpoint (or custom domain via Route53)
-    2. NLB security group checks if source IP is allowed
-    3. Allowed traffic forwarded to VPC endpoint
-    4. VPC endpoint routes to OpenSearch Serverless collection
-    5. User accesses OpenSearch dashboards
+    Architecture:
+    - Public NLB fronts a VPC endpoint (NLBs don't support security groups)
+    - VPC endpoint security group enforces IP allowlist + NLB subnet access
+    - OpenSearch collection is VPC-only (no public access)
+    - Single controlled ingress point through NLB → VPC endpoint → OpenSearch
     """
     
     def __init__(
@@ -64,7 +71,8 @@ class OpenSearchServerlessConstruct(Construct):
         standby_replicas : Optional[bool]
             Whether to use standby replicas for the collection
         allowed_ips : Optional[List[str]]
-            List of CIDR ranges allowed to access the dashboard via NLB
+            List of CIDR ranges allowed to access the dashboard. 
+            Enforced at VPC endpoint security group level.
         """
         super().__init__(scope, construct_id)
         
@@ -85,7 +93,7 @@ class OpenSearchServerlessConstruct(Construct):
         encryption_policy = opensearch.CfnSecurityPolicy(
             self,
             "EncryptionPolicy",
-            name=f"{self.collection_name}-encryption-policy",
+            name=f"encryption-policy",
             type="encryption",
             policy=json.dumps({
                 "Rules": [{
@@ -102,7 +110,7 @@ class OpenSearchServerlessConstruct(Construct):
         data_access_policy = opensearch.CfnAccessPolicy(
             self,
             "DataAccessPolicy",
-            name=f"{self.collection_name}-data-access-policy",
+            name=f"data-access-policy",
             type="data",
             policy=json.dumps([{
                 "Rules": [
@@ -155,53 +163,53 @@ class OpenSearchServerlessConstruct(Construct):
         self.collection_id = self.collection.attr_id
     
     def _create_private_subnets(self) -> None:
-        """Create dedicated private subnets for OpenSearch Serverless VPC endpoint."""
-        # Get the VPC's availability zones
-        availability_zones = self.vpc.availability_zones
+        """Use existing private isolated subnets for OpenSearch Serverless VPC endpoint."""
+        # Use existing private isolated subnets from the VPC instead of creating new ones
+        # This avoids CIDR conflicts and subnet management complexity
+        private_subnets = self.vpc.select_subnets(
+            subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
+        ).subnets
         
-        # Create private subnets using CfnSubnet for proper CIDR handling
-        # Use higher indices (200-201) to avoid conflicts with existing subnets
-        self.opensearch_subnets = []
-        for i, az in enumerate(availability_zones[:2]):
-            subnet = ec2.CfnSubnet(
-                self,
-                f"OpenSearchPrivateSubnet{i+1}",
-                availability_zone=az,
-                vpc_id=self.vpc.vpc_id,
-                cidr_block=Fn.select(200 + i, Fn.cidr(self.vpc.vpc_cidr_block, 256, "8")),
-                map_public_ip_on_launch=False,
-                tags=[{
-                    "key": "Name",
-                    "value": f"OpenSearch-Private-Subnet-{i+1}"
-                }]
+        if not private_subnets:
+            raise ValueError(
+                "No private isolated subnets found in VPC. "
+                "OpenSearch Serverless VPC endpoint requires private subnets."
             )
-            self.opensearch_subnets.append(subnet)
+        
+        # Store subnet IDs for VPC endpoint creation
+        self.opensearch_subnet_ids = [subnet.subnet_id for subnet in private_subnets]
     
     def _create_vpc_endpoint(self) -> None:
         """Create VPC Interface Endpoint for OpenSearch Serverless."""
         # Create security group for VPC endpoint
+        # This is where all IP-based access control happens (NLB doesn't support security groups)
         self.vpce_security_group = ec2.SecurityGroup(
             self,
             "VPCEndpointSecurityGroup",
             vpc=self.vpc,
-            description="Security group for OpenSearch Serverless VPC endpoint",
+            description="Security group for OpenSearch Serverless VPC endpoint with IP allowlist",
             allow_all_outbound=True,
         )
         
-        # Allow HTTPS traffic from within the VPC
-        self.vpce_security_group.add_ingress_rule(
-            peer=ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-            connection=ec2.Port.tcp(443),
-            description="Allow HTTPS from VPC",
-        )
+        # Add ingress rules for each allowed IP/CIDR (user access control)
+        for idx, ip_cidr in enumerate(self.allowed_ips):
+            # Add /32 suffix if not already in CIDR notation
+            if '/' not in ip_cidr:
+                ip_cidr = f"{ip_cidr}/32"
+            
+            self.vpce_security_group.add_ingress_rule(
+                peer=ec2.Peer.ipv4(ip_cidr),
+                connection=ec2.Port.tcp(443),
+                description=f"Allow HTTPS from allowed IP {idx + 1}",
+            )
         
-        # Create VPC endpoint in the dedicated private subnets
+        # Create VPC endpoint in the existing private subnets
         self.vpc_endpoint = opensearch.CfnVpcEndpoint(
             self,
             "VPCEndpoint",
             name=f"{self.collection_name}-vpce",
             vpc_id=self.vpc.vpc_id,
-            subnet_ids=[subnet.ref for subnet in self.opensearch_subnets],
+            subnet_ids=self.opensearch_subnet_ids,
             security_group_ids=[self.vpce_security_group.security_group_id],
         )
         
@@ -209,7 +217,7 @@ class OpenSearchServerlessConstruct(Construct):
         network_policy = opensearch.CfnSecurityPolicy(
             self,
             "NetworkPolicy",
-            name=f"{self.collection_name}-network-policy",
+            name="network-policy",
             type="network",
             policy=json.dumps([{
                 "Rules": [
@@ -234,36 +242,26 @@ class OpenSearchServerlessConstruct(Construct):
         self.vpc_endpoint_id = self.vpc_endpoint.attr_id
     
     def _create_network_load_balancer(self) -> None:
-        """Create public NLB with security group IP filtering to front the VPC endpoint."""
-        # Create security group for NLB with IP-based access control
-        self.nlb_security_group = ec2.SecurityGroup(
-            self,
-            "NLBSecurityGroup",
-            vpc=self.vpc,
-            description=f"Security group for {self.collection_name} OpenSearch NLB with IP allowlist",
-            allow_all_outbound=True,
-        )
-        
-        # Add ingress rules for each allowed IP/CIDR
-        for idx, ip_cidr in enumerate(self.allowed_ips):
-            # Add /32 suffix if not already in CIDR notation
-            if '/' not in ip_cidr:
-                ip_cidr = f"{ip_cidr}/32"
-            
-            self.nlb_security_group.add_ingress_rule(
-                peer=ec2.Peer.ipv4(ip_cidr),
-                connection=ec2.Port.tcp(443),
-            )
-        
+        """Create public NLB to front the VPC endpoint."""
         # Create public NLB in public subnets
+        # Note: NLBs do NOT support security groups - all access control is done at the VPC endpoint SG
         self.nlb = elbv2.NetworkLoadBalancer(
             self,
             "NLB",
             vpc=self.vpc,
             internet_facing=True,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
-            security_groups=[self.nlb_security_group],
         )
+        
+        # Allow traffic from NLB subnets to VPC endpoint
+        # NLB forwards traffic from its subnets to the VPC endpoint
+        public_subnets = self.vpc.select_subnets(subnet_type=ec2.SubnetType.PUBLIC).subnets
+        for idx, subnet in enumerate(public_subnets):
+            self.vpce_security_group.add_ingress_rule(
+                peer=ec2.Peer.ipv4(subnet.ipv4_cidr_block),
+                connection=ec2.Port.tcp(443),
+                description=f"Allow HTTPS from NLB subnet {idx + 1}",
+            )
         
         # Create target group for IP targets
         self.target_group = elbv2.NetworkTargetGroup(
@@ -388,12 +386,15 @@ def handler(event, context):
         custom_resource.node.add_dependency(self.vpc_endpoint)
         custom_resource.node.add_dependency(self.target_group)
         
-        # Update VPC endpoint security group to allow traffic from NLB
-        self.vpce_security_group.add_ingress_rule(
-            peer=ec2.Peer.security_group_id(self.nlb_security_group.security_group_id),
-            connection=ec2.Port.tcp(443),
-            description="Allow HTTPS from NLB",
-        )
+        # Allow traffic from NLB subnet CIDRs to VPC endpoint
+        # NLB sends traffic using IPs from the public subnets it sits in
+        public_subnets = self.vpc.select_subnets(subnet_type=ec2.SubnetType.PUBLIC).subnets
+        for idx, subnet in enumerate(public_subnets):
+            self.vpce_security_group.add_ingress_rule(
+                peer=ec2.Peer.ipv4(subnet.ipv4_cidr_block),
+                connection=ec2.Port.tcp(443),
+                description=f"Allow HTTPS from NLB public subnet {idx + 1}",
+            )
         
         # Expose NLB DNS name as the public endpoint
         self.nlb_dns_name = self.nlb.load_balancer_dns_name
