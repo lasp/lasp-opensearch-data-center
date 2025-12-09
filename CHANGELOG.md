@@ -1,7 +1,12 @@
 # Version Changes
+## v1.0.8 (released)
+- Updated the max file size check for incoming files to the Dropbox Lambda and set limit to 30MB.
+- Made S3 bucket versioning a configurable parameter.
+- Updated OpenSearch to support inbound IP list with a restrictive localhost default.
+- Added documentation.
 
 ## v1.0.7 (released)
-- Allow for configuration of the opensearch instance EBS size in the construct
+- Allow for configuration of the OpenSearch instance EBS size in the construct
 
 ## v1.0.6 (released)
 - Changed Dropbox to only send out notifications to the SQS for files in the "received-fles" folder. 
