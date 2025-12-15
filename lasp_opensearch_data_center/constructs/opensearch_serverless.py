@@ -16,34 +16,65 @@ from aws_cdk import (
     Duration,
     Stack,
 )
-"""OPENSEARCH SERVERLESS WITH IP-RESTRICTED ACCESS VIA NLB
-Architecture Flow:
-1. User (with allowed IP) hits public NLB endpoint (or custom domain via Route53)
-2. NLB forwards traffic to VPC endpoint (NLB does not support security groups)
-3. VPC endpoint security group enforces:
-   - IP allowlist (allowed_ips parameter)
-   - NLB subnet CIDR ranges (to accept traffic from NLB)
-4. Allowed traffic reaches OpenSearch Serverless collection
-5. User accesses OpenSearch dashboards
+"""
+Notes for whoever picks up this ticket next
 
-Security Model:
-- IP-based access control enforced at VPC endpoint security group
-- Only specified IPs in allowlist can access
-- Only traffic from NLB subnets accepted (prevents VPC bypass)
-- No broad VPC CIDR access
-- VPC-only collection (no public access)
+Components:
+- OpenSearch Serverless Collection (type: SEARCH)
+- VPC Endpoint (Interface Endpoint for aoss service)
+- Network Load Balancer (public-facing, in public subnets)
+- Security Group on VPC Endpoint (handles IP allowlisting)
+- Lambda function to resolve VPC Endpoint ENI IPs and register as NLB targets
+
+
+FLOW 1: INGEST LAMBDA -> OPENSEARCH COLLECTION 
+
+This flow works because the Lambda runs inside the VPC with direct access to the
+VPC endpoint.
+
+Steps:
+1. Ingest Lambda is deployed in the VPC (private subnets)
+2. Lambda makes HTTPS request to OpenSearch collection endpoint
+3. Traffic routes through VPC Endpoint (via private DNS resolution)
+4. VPC Endpoint security group allows traffic from Lambda's subnet
+5. Network policy allows access from the VPC Endpoint
+6. Data access policy grants the Lambda's IAM role permissions to read/write
+7. Lambda successfully ingests data to the collection
+
+Notes:
+- Lambda is in the same VPC as the VPC Endpoint
+- Network policy includes the VPC Endpoint ID in SourceVPCEs
+- Data access policy grants the Lambda the appropriate permissions
+- Security group allows inbound from Lambda subnet
+
+
+FLOW 2: USER -> OPENSEARCH DASHBOARDS (NOT WORKING)
+
+Current Setup:
+1. User (with allowed IP) makes HTTPS request to public NLB DNS name
+2. NLB listener on port 443 receives the request
+3. NLB forwards traffic to target group containing VPC Endpoint ENI private IPs
+   - Lambda function resolves VPC Endpoint ENIs and registers their IPs as targets
+4. VPC Endpoint security group checks source IP:
+   - Allows if source matches allowed_ips parameter
+   - Allows if source is from NLB public subnet CIDRs
+5. Traffic reaches OpenSearch Serverless VPC Endpoint
+6. Network policy validates request comes from allowed SourceVPCEs
+7. User tries to access OpenSearch Dashboards <-- FAILS HERE
+
+Why it doesn't work:
+- The lambda function to register target groups isnt working
+- Probably need to add in an internet gatway to get this to work
+
+Maybe Helpful Links:
+https://repost.aws/knowledge-center/opensearch-dashboard-serverless
+https://aws.amazon.com/blogs/big-data/network-connectivity-patterns-for-amazon-opensearch-serverless/
 """
 
 
 class OpenSearchServerlessConstruct(Construct):
     """
     OpenSearch Serverless construct with VPC endpoint security group-based IP access control.
-    
-    Architecture:
-    - Public NLB fronts a VPC endpoint (NLBs don't support security groups)
-    - VPC endpoint security group enforces IP allowlist + NLB subnet access
-    - OpenSearch collection is VPC-only (no public access)
-    - Single controlled ingress point through NLB → VPC endpoint → OpenSearch
     """
     
     def __init__(
