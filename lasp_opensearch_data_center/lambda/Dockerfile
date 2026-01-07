@@ -49,3 +49,7 @@ ENTRYPOINT [ "./lambda_entrypoint.sh" ]
 # Target for OS snapshot lambda
 FROM lambda-base AS snapshot-lambda
 CMD [ "opensearch_data_center_lambda_runtime.snapshot_handler.handler" ]
+
+# Target for OS index archival lambda
+FROM lambda-base AS index-sunset-handler
+CMD [ "opensearch_data_center_lambda_runtime.index_sunset_handler.handler" ]

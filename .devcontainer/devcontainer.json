@@ -5,7 +5,7 @@
 		"ghcr.io/devcontainers/features/node:1": {},
 		"ghcr.io/devcontainers/features/aws-cli:1": {}
 	},
-	"postCreateCommand": "npm install -g aws-cdk && poetry install",
+	"postCreateCommand": "npm install -g aws-cdk && pip install poetry && poetry install",
 	"customizations": {
 		"vscode": {
 			"extensions": [
