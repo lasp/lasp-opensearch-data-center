@@ -29,16 +29,17 @@ def _opensearch_env(opensearch_container, monkeypatch):
 def _wipe_opensearch(opensearch_container):
     # Clear opensearch before testing
     client = opensearch_container.get_client()
-    for index in client.indices.get("*").keys():
-        client.indices.delete(index=index, ignore=[404])
-    for t in client.indices.get_index_template().get("index_templates", []):
-        client.indices.delete_index_template(name=t["name"], ignore=[404])
+    
+    #for index in client.indices.get("*").keys():
+    #    client.indices.delete(index=index, ignore=[404])
+    #for t in client.indices.get_index_template().get("index_templates", []):
+    #    client.indices.delete_index_template(name=t["name"], ignore=[404])
 
     yield
 
     # Clear opensearch after testing
-    client = opensearch_container.get_client()
-    for index in client.indices.get("*").keys():
-        client.indices.delete(index=index, ignore=[404])
-    for t in client.indices.get_index_template().get("index_templates", []):
-        client.indices.delete_index_template(name=t["name"], ignore=[404])
+    #client = opensearch_container.get_client()
+    #for index in client.indices.get("*").keys():
+    #    client.indices.delete(index=index, ignore=[404])
+    #for t in client.indices.get_index_template().get("index_templates", []):
+    #    client.indices.delete_index_template(name=t["name"], ignore=[404])
