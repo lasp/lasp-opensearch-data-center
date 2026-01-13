@@ -13,7 +13,7 @@ import functools
 # Installed
 import boto3
 # Local
-from lasp_opensearch_data_center.helpers import (
+from helpers import (
     get_opensearch_client,
     configure_itdc_logging,
     send_sns_general_alert,
