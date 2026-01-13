@@ -271,7 +271,7 @@ class OpenSearchConstruct(Construct):
             # The lambda directory is considered a data directory for the package and is packaged along with the
             # python code during distribution.
             docker_context_path = str(
-                (Path(__file__).parent.parent / "lambda").absolute()
+                (Path(__file__).parent.parent / "lambda_functions").absolute()
             )
             docker_image_code = lambda_.DockerImageCode.from_image_asset(
                 directory=docker_context_path,
