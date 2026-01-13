@@ -342,7 +342,7 @@ class OpenSearchConstruct(Construct):
             "IndexSunsetLambda",
             code=lambda_.DockerImageCode.from_image_asset(
                 docker_context_path,
-                target="index-sunset-handler",
+                target="index-sunset-lambda",
                 platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             timeout=Duration.minutes(15), # archiving a large index usually takes around 10 minutes
