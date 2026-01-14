@@ -3,7 +3,10 @@
 	"image": "mcr.microsoft.com/devcontainers/python:0-3.11",
 	"features": {
 		"ghcr.io/devcontainers/features/node:1": {},
-		"ghcr.io/devcontainers/features/aws-cli:1": {}
+		"ghcr.io/devcontainers/features/aws-cli:1": {},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"version": "latest"
+		}
 	},
 	"postCreateCommand": "npm install -g aws-cdk && pip install poetry && poetry install",
 	"customizations": {
