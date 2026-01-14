@@ -1,0 +1,40 @@
+name: Unit Testing
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  github_actions_unit_test_management:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: install poetry
+      uses: Gr1N/setup-poetry@v8
+      with:
+        poetry-version: "1.8.0"
+
+    - name: Install dependencies
+      run: |
+        poetry install
+        
+    - name: Show environment
+      run: |
+        python -V || true
+        node -v   || true
+        pip list --format=freeze || true
+        env | sort
+
+    - name: Unit Tests
+      run: poetry run pytest tests/
