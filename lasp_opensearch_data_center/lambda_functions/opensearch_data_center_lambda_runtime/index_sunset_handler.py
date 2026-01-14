@@ -13,7 +13,7 @@ import functools
 # Installed
 import boto3
 # Local
-from helpers import (
+from opensearch_data_center_lambda_runtime.helpers import (
     get_opensearch_client,
     configure_itdc_logging,
     send_sns_general_alert,
@@ -109,7 +109,7 @@ def alert_on_failure(func):
                     "args": args,
                 }
             logger.exception(f"Error in {func.__name__}")
-            send_sns_general_alert(msg, filename="N/A")    # send alert
+            #send_sns_general_alert(msg, filename="N/A")    # send alert
             raise                                          # re-raise
     return wrapper
 
@@ -121,7 +121,11 @@ def find_large_indexes(event):
     Returns a list of index names to archive.
     """
 
-    index_threshold_bytes = int(os.environ.get("INDEX_SIZE_THRESHOLD_GB", "30")) * (1024 ** 3)
+    execution_input = event.get("execution_input", {})
+    index_threshold_bytes = (1024 ** 3) * float(execution_input.get("threshold_override", 
+                                                os.environ.get("INDEX_SIZE_THRESHOLD_GB", "30")))
+
+    logger.info(f"Using a threshold of {str(index_threshold_bytes)} bytes")
 
     try:
         client = get_opensearch_client()
@@ -164,7 +168,7 @@ def find_large_indexes(event):
                 "index_size_threshold_bytes": index_threshold_bytes,
             })
 
-            send_large_index_alert(index, index_size, int(index_threshold_bytes/(1024 ** 3)))
+            #send_large_index_alert(index, index_size, int(index_threshold_bytes/(1024 ** 3)))
             large_indexes.append(index)
     return large_indexes
     
@@ -220,8 +224,6 @@ def kickoff_archival(event):
             orig_index=index,
             original_error=e
         )
-
-    
     # Retrieve the mapping and settings of the original index
     try:
         original_mapping = client.indices.get_mapping(index=index)
@@ -490,7 +492,7 @@ def cleanup_archival(event):
         msg = {
             "msg": f"Completed archival of index {index} into {new_index}",
         }
-        send_sns_general_alert(msg,filename="N/A")
+        #send_sns_general_alert(msg,filename="N/A")
     except Exception as e:
         logger.error(f"Failed to send archival success message to Slack: {e}")
         raise
