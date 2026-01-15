@@ -398,7 +398,7 @@ class OpenSearchIndexArchivalConstruct(Construct):
             log_group=sunset_log_group,
             environment={
                 "INDEX_SIZE_THRESHOLD_GB": str(self.node.try_get_context("INDEX_ARCHIVAL_SIZE_THRESHOLD_GB")) or "10", 
-                IngestLambdaEnv.OPEN_SEARCH_ENDPOINT: domain.domain_endpoint,
+                "OPEN_SEARCH_ENDPOINT": domain.domain_endpoint,
                 "SNS_TOPIC_ARN": sns_alarm_topic_arn
             },
         )
