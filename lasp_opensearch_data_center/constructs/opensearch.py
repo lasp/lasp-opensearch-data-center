@@ -363,9 +363,9 @@ class OpenSearchIndexArchivalConstruct(Construct):
         super().__init__(scope, construct_id)
 
         if sns_alarm_topic:
-            sns_alarm_topic = sns_alarm_topic.topic_arn
+            sns_alarm_topic_arn = sns_alarm_topic.topic_arn
         else:
-            sns_alarm_topic = ''
+            sns_alarm_topic_arn = ''
 
         # ##################################### #
         # Create resources for index archival   #
@@ -397,7 +397,7 @@ class OpenSearchIndexArchivalConstruct(Construct):
             environment={
                 "INDEX_SIZE_THRESHOLD_GB": str(self.node.try_get_context("INDEX_ARCHIVAL_SIZE_THRESHOLD_GB")) or "10", 
                 "OPEN_SEARCH_ENDPOINT": f"https://{domain.domain_endpoint}/",
-                "SNS_TOPIC_ARN": sns_alarm_topic
+                "SNS_TOPIC_ARN": sns_alarm_topic_arn
             },
         )
 
