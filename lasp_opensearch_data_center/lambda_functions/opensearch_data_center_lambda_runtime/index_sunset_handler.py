@@ -120,7 +120,8 @@ def find_large_indexes(event):
                                                 os.environ.get("INDEX_SIZE_THRESHOLD_GB", "30")))
 
     logger.info(f"Using a threshold of {str(index_threshold_bytes)} bytes")
-
+    print("****************************")
+    print(event)
     try:
         client = get_opensearch_client()
     except Exception as e:
@@ -141,6 +142,7 @@ def find_large_indexes(event):
     large_indexes = []
 
     for index, index_size in indices:
+        print(index)
         logger.debug(f"On index {index} of size {index_size} bytes")
 
         # Skip indices that have already been archived
