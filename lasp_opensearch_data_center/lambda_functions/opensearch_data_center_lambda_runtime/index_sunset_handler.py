@@ -77,7 +77,7 @@ def handler(event, context):
     
 def alert_on_failure(func):
     """
-    Decorator that automatically sends an SNS/Slack alert when a function raises an exception.
+    Decorator that automatically sends an SNS alert when a function raises an exception.
 
     This decorator wraps a function and catches any exceptions it raises. When an exception occurs, it:
         1. Logs the full stack trace using
@@ -109,7 +109,7 @@ def alert_on_failure(func):
                     "args": args,
                 }
             logger.exception(f"Error in {func.__name__}")
-            #send_sns_general_alert(msg, filename="N/A")    # send alert
+            send_sns_general_alert(msg, filename="N/A")    # send alert
             raise                                          # re-raise
     return wrapper
 
@@ -492,7 +492,7 @@ def cleanup_archival(event):
         msg = {
             "msg": f"Completed archival of index {index} into {new_index}",
         }
-        #send_sns_general_alert(msg,filename="N/A")
+        send_sns_general_alert(msg, filename="N/A")
     except Exception as e:
         logger.error(f"Failed to send archival success message to Slack: {e}")
         raise

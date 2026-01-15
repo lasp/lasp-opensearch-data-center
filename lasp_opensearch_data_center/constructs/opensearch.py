@@ -25,6 +25,7 @@ from aws_cdk import (
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as tasks,
     aws_logs as logs,
+    aws_sns as sns,
     Duration
 )
 from aws_cdk.aws_stepfunctions import DefinitionBody
@@ -326,10 +327,55 @@ class OpenSearchConstruct(Construct):
         snapshot_lambda_event_rule.add_target(targets.LambdaFunction(snapshot_lambda))
 
 
+class OpenSearchIndexArchivalConstruct(Construct):
+    """Construct to create method of automatically archiving indexes
+
+    Creates a Step Function, a Lambda, and a an AWS event. The event triggers the step function,
+    which runs the lambda function with different inputs to archive datasets that have grown too
+    large to query. 
+    """
+
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        environment: Environment,
+        domain: opensearch.Domain,
+        sns_alarm_topic: sns.Topic = None
+    ) -> None:
+        """
+        Construct init.
+
+        Parameters
+        ----------
+        scope : Construct
+            The scope in which this Construct is instantiated, usually the `self` inside a Stack.
+        construct_id : str
+            ID for this construct instance, e.g. "MyOpenSearchConstruct".
+        environment : Environment
+            AWS environment (account and region).
+        domain : opensearch.Domain
+            The Opensearch instance to run the archival process on
+        sns_alarm_topic : sns.Topic, optional
+            The SNS topic to send archival alerts to 
+        """
+        super().__init__(scope, construct_id)
+
+        if sns_alarm_topic:
+            sns_alarm_topic = sns_alarm_topic.topic_arn
+        else:
+            sns_alarm_topic = ''
+
         # ##################################### #
         # Create resources for index archival   #
         # ##################################### #
         # INDEX SUNSET LAMBDA
+
+        docker_context_path = str(
+                (Path(__file__).parent.parent / "lambda_functions").absolute()
+            )
+        
         sunset_log_group = logs.LogGroup(
             self,
             "IndexSunsetLambdaLogGroup",
@@ -350,21 +396,23 @@ class OpenSearchConstruct(Construct):
             log_group=sunset_log_group,
             environment={
                 "INDEX_SIZE_THRESHOLD_GB": str(self.node.try_get_context("INDEX_ARCHIVAL_SIZE_THRESHOLD_GB")) or "10", 
-                "OPEN_SEARCH_ENDPOINT": f"https://{self.domain.domain_endpoint}/",
-                #"SNS_TOPIC_ARN": self.cw_alarm_construct.cloudwatch_sns_topic.topic_arn
+                "OPEN_SEARCH_ENDPOINT": f"https://{domain.domain_endpoint}/",
+                "SNS_TOPIC_ARN": sns_alarm_topic
             },
         )
 
         self.sunset_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["es:ESHttpGet", "es:ESHttpPost", "es:ESHttpPut", "es:ESHttpDelete", "es:ESHttpHead"],
-                resources=[f"{self.domain.domain_arn}/*"]
+                resources=[f"{domain.domain_arn}/*"]
             )
         )
 
-        #self.cw_alarm_construct.cloudwatch_sns_topic.grant_publish(self.sunset_lambda)
+        if sns_alarm_topic:
+            sns_alarm_topic.grant_publish(self.sunset_lambda)
         
-        ## Defining a Step function for automated archival
+        ## DEFINING STEP FUNCTION
+
         # Step 0 - Scan OpenSearch for large indexes
         find_indexes = tasks.LambdaInvoke(
             self,
