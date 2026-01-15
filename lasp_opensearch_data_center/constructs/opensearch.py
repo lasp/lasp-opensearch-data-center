@@ -22,13 +22,19 @@ from aws_cdk import (
     aws_events as events,
     aws_events_targets as targets,
     aws_ecr_assets as ecr_assets,
+    aws_stepfunctions as sfn,
+    aws_stepfunctions_tasks as tasks,
+    aws_logs as logs,
+    aws_sns as sns,
+    Duration
 )
+from aws_cdk.aws_stepfunctions import DefinitionBody
 
 # Local
 from lasp_opensearch_data_center.constructs.constants import (
+
     OPENSEARCH_SNAPSHOT_REPO_NAME,
 )
-
 
 class OpenSearchConstruct(Construct):
     """OpenSearch Construct to create the Open Search Domain and cluster nodes
@@ -265,7 +271,7 @@ class OpenSearchConstruct(Construct):
             # The lambda directory is considered a data directory for the package and is packaged along with the
             # python code during distribution.
             docker_context_path = str(
-                (Path(__file__).parent.parent / "lambda").absolute()
+                (Path(__file__).parent.parent / "lambda_functions").absolute()
             )
             docker_image_code = lambda_.DockerImageCode.from_image_asset(
                 directory=docker_context_path,
@@ -318,3 +324,221 @@ class OpenSearchConstruct(Construct):
             schedule=snapshot_schedule,
         )
         snapshot_lambda_event_rule.add_target(targets.LambdaFunction(snapshot_lambda))
+
+
+class OpenSearchIndexArchivalConstruct(Construct):
+    """Construct to create method of automatically archiving indexes
+
+    Creates a Step Function, a Lambda, and a an AWS event. The event triggers the step function,
+    which runs the lambda function with different inputs to archive datasets that have grown too
+    large to query. 
+    """
+
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        environment: Environment,
+        domain: opensearch.Domain,
+        sns_alarm_topic: sns.Topic = None
+    ) -> None:
+        """
+        Construct init.
+
+        Parameters
+        ----------
+        scope : Construct
+            The scope in which this Construct is instantiated, usually the `self` inside a Stack.
+        construct_id : str
+            ID for this construct instance, e.g. "MyOpenSearchConstruct".
+        environment : Environment
+            AWS environment (account and region).
+        domain : opensearch.Domain
+            The Opensearch instance to run the archival process on
+        sns_alarm_topic : sns.Topic, optional
+            The SNS topic to send archival alerts to 
+        """
+        super().__init__(scope, construct_id)
+
+        if sns_alarm_topic:
+            sns_alarm_topic_arn = sns_alarm_topic.topic_arn
+        else:
+            sns_alarm_topic_arn = ''
+
+        # ##################################### #
+        # Create resources for index archival   #
+        # ##################################### #
+        # INDEX SUNSET LAMBDA
+
+        docker_context_path = str(
+                (Path(__file__).parent.parent / "lambda_functions").absolute()
+            )
+        
+        sunset_log_group = logs.LogGroup(
+            self,
+            "IndexSunsetLambdaLogGroup",
+            retention=logs.RetentionDays.INFINITE,
+            removal_policy=RemovalPolicy.RETAIN
+        )
+
+        self.sunset_lambda = lambda_.DockerImageFunction(
+            self,
+            "IndexSunsetLambda",
+            code=lambda_.DockerImageCode.from_image_asset(
+                docker_context_path,
+                target="index-sunset-lambda",
+                platform=ecr_assets.Platform.LINUX_AMD64,
+            ),
+            timeout=Duration.minutes(15), # archiving a large index usually takes around 10 minutes
+            retry_attempts=0,
+            log_group=sunset_log_group,
+            environment={
+                "INDEX_SIZE_THRESHOLD_GB": str(self.node.try_get_context("INDEX_ARCHIVAL_SIZE_THRESHOLD_GB")) or "10", 
+                "OPEN_SEARCH_ENDPOINT": domain.domain_endpoint,
+                "SNS_TOPIC_ARN": sns_alarm_topic_arn
+            },
+        )
+
+        self.sunset_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["es:ESHttpGet", "es:ESHttpPost", "es:ESHttpPut", "es:ESHttpDelete", "es:ESHttpHead"],
+                resources=[f"{domain.domain_arn}/*"]
+            )
+        )
+
+        if sns_alarm_topic:
+            sns_alarm_topic.grant_publish(self.sunset_lambda)
+        
+        ## DEFINING STEP FUNCTION
+
+        # Step 0 - Scan OpenSearch for large indexes
+        find_indexes = tasks.LambdaInvoke(
+            self,
+            "FindLargeIndexesStep",
+            lambda_function=self.sunset_lambda,
+            payload=sfn.TaskInput.from_object({
+                "step": "find_large_indexes",
+                "execution_input": sfn.JsonPath.string_at("$") 
+            }),
+            result_path="$.find_indexes",
+            payload_response_only=True
+        )
+
+        # Step 1 - Kick off Archival
+        # This LambdaInvoke step calls the sunset Lambda with the "kickoff_archival" step.
+        # It blocks writes to the original index, creates a new index, and starts the asynchronous reindexing.
+        kickoff_archive = tasks.LambdaInvoke(
+            self, 
+            "KickoffIndexArchivalStep",
+            lambda_function=self.sunset_lambda,
+            payload=sfn.TaskInput.from_object({  # The payload passed to the step
+                "step": "kickoff_archival",
+                "index.$": "$.index"  # Extract index from current Map iteration item using JSONPath
+            }),
+            result_path="$.kickoff",  # Save the Lambda's output in the state machine execution context
+            payload_response_only=True
+        )
+
+        # Step 2 - Poll Reindex task
+        # This LambdaInvoke step checks the status of the reindex task started in kickoff_archival.
+        # It returns either "COMPLETED" or "IN_PROGRESS" depending on the task status.
+        poll_reindex = tasks.LambdaInvoke(
+            self,
+            "PollReindexTaskStep",
+            lambda_function=self.sunset_lambda,
+            payload=sfn.TaskInput.from_object({
+                "step": "poll_reindex_task",
+                "index.$": "$.kickoff.index",
+                "new_index.$": "$.kickoff.new_index",
+                "task_id.$": "$.kickoff.task_id"
+            }),
+            result_path="$.kickoff",
+            payload_response_only=True
+        )
+
+        # Wait state between polls (2.5 minutes)
+        # Introduces a delay (2.5 minutes) between polling attempts to avoid overloading the cluster
+        wait = sfn.Wait(
+            self, "WaitForReindexStep",
+            time=sfn.WaitTime.duration(Duration.minutes(2.5))
+        )
+
+        # Step 3 - archival cleanup
+        # After reindexing completes, this step adds replicas to the new index and deletes the original index.
+        cleanup_archive = tasks.LambdaInvoke(
+            self, 
+            "Cleanup Archival",
+            lambda_function=self.sunset_lambda,
+            payload=sfn.TaskInput.from_object({
+                "step": "cleanup_archival",
+                "index.$": "$.kickoff.index",
+                "new_index.$": "$.kickoff.new_index"
+            }),
+            result_path="$.cleanup",
+            payload_response_only=True
+        )
+
+        # Choice: if reindex still in progress, loop back
+        # This is similar to an "if/else" block for Step Functions.
+        # If reindexing is still in progress, loop back to wait -> poll_reindex.
+        poll_choice = sfn.Choice(self, "Reindex Completed?")
+        
+        poll_choice.when(
+            sfn.Condition.string_equals("$.kickoff.status", "IN_PROGRESS"),
+            wait.next(poll_reindex).next(poll_choice) # Loop back to the wait step
+        )
+        poll_choice.when(
+            sfn.Condition.string_equals("$.kickoff.status", "COMPLETED"),
+            cleanup_archive # Move to cleanup if reindex finished
+        )
+        poll_choice.otherwise(
+            sfn.Fail(self, "Reindex Failed",
+                     cause="Reindexing did not complete",
+                     error="TaskFailed")
+        )
+
+        # Chain states together 
+        # The order here sets the default execution path of the state machine
+        per_index_flow = kickoff_archive.next(poll_choice)
+        archive_map = sfn.Map(
+            self,
+            "ArchiveEachIndex",
+            items_path="$.find_indexes", # Access current array item from Map iteration
+            item_selector={"index.$": "$$.Map.Item.Value"},
+            result_path="$.archived_indexes"
+        )
+        archive_map.item_processor(per_index_flow)
+        archive_def = find_indexes.next(archive_map)
+
+
+        # Create the state machine
+        self.archive_state_machine = sfn.StateMachine(
+            self, "IndexSunsetStateMachine",
+            definition_body=DefinitionBody.from_chainable(archive_def),
+            timeout=Duration.hours(12),  # plenty of time for large indexes
+            logs=sfn.LogOptions(
+                destination=logs.LogGroup(
+                    self,
+                    "IndexSunsetStateMachineLog",
+                    retention=logs.RetentionDays.INFINITE,
+                    removal_policy=RemovalPolicy.RETAIN
+                ),
+                level=sfn.LogLevel.ALL
+            )
+        )
+
+        # Set up an event bridge rule to trigger the statemachine once every 24 hours
+        daily_trigger = events.Rule(
+            self,
+            "DailyIndexSunsetSchedule",
+            schedule=events.Schedule.rate(Duration.hours(24)),
+            description="Triggers the IndexSunset state machine daily to archive large indexes."
+        )
+
+        daily_trigger.add_target(
+            targets.SfnStateMachine(
+                self.archive_state_machine,
+            )
+        )
+        self.archive_state_machine.grant_start_execution(iam.ServicePrincipal("events.amazonaws.com"))

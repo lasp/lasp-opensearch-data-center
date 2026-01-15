@@ -19,8 +19,10 @@ aws-cdk-lib = "^2.0.0"
 constructs = "^10.0.0"
 
 [tool.poetry.group.dev.dependencies]
-opensearch_data_center_lambda_runtime = {path="lasp_opensearch_data_center/lambda", develop=true}
+opensearch_data_center_lambda_runtime = {path="lasp_opensearch_data_center/lambda_functions", develop=true}
 mkdocs = "^1.6.0"
+pytest = "*"
+testcontainers = "^4.10.0"
 
 [build-system]
 requires = ["poetry-core"]
