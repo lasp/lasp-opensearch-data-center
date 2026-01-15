@@ -35,7 +35,9 @@ from lasp_opensearch_data_center.constructs.constants import (
 
     OPENSEARCH_SNAPSHOT_REPO_NAME,
 )
-
+from lasp_opensearch_data_center.constructs.constants import (
+    IngestLambdaEnv
+)
 
 class OpenSearchConstruct(Construct):
     """OpenSearch Construct to create the Open Search Domain and cluster nodes
@@ -396,7 +398,7 @@ class OpenSearchIndexArchivalConstruct(Construct):
             log_group=sunset_log_group,
             environment={
                 "INDEX_SIZE_THRESHOLD_GB": str(self.node.try_get_context("INDEX_ARCHIVAL_SIZE_THRESHOLD_GB")) or "10", 
-                "OPEN_SEARCH_ENDPOINT": f"https://{domain.domain_endpoint}/",
+                IngestLambdaEnv.OPEN_SEARCH_ENDPOINT: domain.domain_endpoint,
                 "SNS_TOPIC_ARN": sns_alarm_topic_arn
             },
         )
