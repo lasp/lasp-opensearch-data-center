@@ -381,7 +381,7 @@ def cleanup_archival(event):
     orig_doc_count = 0
     new_doc_count = 0
     try:
-        orig_doc_count = client.count(index=index)["count"]  # Get document count in orginal index
+        orig_doc_count = client.count(index=index)["count"]  # Get document count in original index
         new_doc_count = client.count(index=new_index)["count"]   # Get document count in new index
     except Exception as e:
         logger.warning({

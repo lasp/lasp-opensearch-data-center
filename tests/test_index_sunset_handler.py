@@ -13,7 +13,7 @@ def _generate_docs(index_name, count=100):
             "_index": index_name,
             "_source": {
                 "timestamp": time.time(),
-                "data": str(uuid.uuid4()) * 10, 
+                "data": str(uuid.uuid4()) * 10, # Pad document size to help exceed test size threshold
                 "status": "active"
             }
         }

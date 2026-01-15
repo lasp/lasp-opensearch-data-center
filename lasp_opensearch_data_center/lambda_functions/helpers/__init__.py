@@ -25,7 +25,7 @@ def get_opensearch_client() -> opensearchpy.OpenSearch:
             super().__init__(*args, **kwargs)
 
             # Define retry behavior for transient HTTP errors and throttling
-            #TODO need to decide if we want to keep this retry strategy or go back to the defult
+            #TODO need to decide if we want to keep this retry strategy or go back to the default
                 # if we keep it we should adjust the allowed_methods and status_forcelist to better suit our needs
                 # regardless anytime a bulk upload request fails we should not retry
             retry_strategy = Retry(
