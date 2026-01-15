@@ -23,7 +23,6 @@ opensearch_data_center_lambda_runtime = {path="lasp_opensearch_data_center/lambd
 mkdocs = "^1.6.0"
 pytest = "*"
 pytest-randomly = "*"
-moto = "*"
 testcontainers = "^4.10.0"
 openmock = "*"
 aws-lambda-powertools = {version = "^3", extras=["parser"]}

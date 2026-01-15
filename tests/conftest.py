@@ -25,7 +25,7 @@ def monkeypatch_session():
 # Set fake credentials for Opensearch
 @pytest.fixture(scope='session', autouse=True)
 def mock_aws_credentials(monkeypatch_session):
-    """Mocked AWS Credentials for moto."""
+    """Mocked AWS Credentials."""
     monkeypatch_session.setenv('AWS_ACCESS_KEY_ID', 'testing')
     monkeypatch_session.setenv('AWS_SECRET_ACCESS_KEY', 'testing')
     monkeypatch_session.setenv('AWS_SECURITY_TOKEN', 'testing')
