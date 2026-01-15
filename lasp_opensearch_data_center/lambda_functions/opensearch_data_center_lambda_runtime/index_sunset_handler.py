@@ -75,7 +75,7 @@ def alert_on_failure(func):
 
     This decorator wraps a function and catches any exceptions it raises. When an exception occurs, it:
         1. Logs the full stack trace using
-        2. Constructs a slack alert message
+        2. Constructs a SNS alert message
         3. Sends the alert via `send_sns_message`
         4. Re-raises the original exception
 
@@ -120,8 +120,7 @@ def find_large_indexes(event):
                                                 os.environ.get("INDEX_SIZE_THRESHOLD_GB", "30")))
 
     logger.info(f"Using a threshold of {str(index_threshold_bytes)} bytes")
-    print("****************************")
-    print(event)
+
     try:
         client = get_opensearch_client()
     except Exception as e:
@@ -142,10 +141,6 @@ def find_large_indexes(event):
     large_indexes = []
 
     for index, index_size in indices:
-        print("#######")
-        print(index)
-        print(index_size)
-        print(index_threshold_bytes)
         logger.debug(f"On index {index} of size {index_size} bytes")
 
         # Skip indices that have already been archived
@@ -493,7 +488,7 @@ def cleanup_archival(event):
         }
         send_sns_message("GeneralAlert", "General Alert", msg)
     except Exception as e:
-        logger.error(f"Failed to send archival success message to Slack: {e}")
+        logger.error(f"Failed to send archival success message to SNS: {e}")
         raise
 
     return {
@@ -595,7 +590,7 @@ def reindex(index:str, new_index:str, client) -> str:
             original_error=e
         )
 
-def send_sns_message(error_type: str, subject: str, msg_content: dict) -> None:
+def send_sns_message(error_type: str, subject: str, msg: dict) -> None:
     """
     Sends a formatted SNS notification using the AWS Chatbot-compatible message structure.
 
@@ -611,14 +606,14 @@ def send_sns_message(error_type: str, subject: str, msg_content: dict) -> None:
     subject : str
         The subject line of the SNS message.
     
-    msg_content : dict
+    msg : dict
         The message body, formatted according to the AWS Chatbot `client-markdown` structure.
         Must include keys like "textType", "title", and "description".
     """
-    message = {
+    message_content = {
         "textType": "client-markdown",
         "title": subject,
-        "description": msg_content
+        "description": msg
     }
     sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
     if not sns_topic_arn:
@@ -629,7 +624,7 @@ def send_sns_message(error_type: str, subject: str, msg_content: dict) -> None:
     message = {
         "version": "1.0",
         "source": "custom",
-        "content": msg_content,
+        "content": message_content,
         "metadata": {
             "enableCustomActions": False,
         }

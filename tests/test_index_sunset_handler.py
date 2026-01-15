@@ -1,4 +1,4 @@
-"""Test ingesting a CSV file of packet data"""
+"""Tests OpenSearch index archival/sunset and rotation behavior via index_sunset_handler."""
 # Installed
 import uuid
 import time
@@ -46,7 +46,7 @@ def test_index_rotation_triggers_on_large_size(opensearch_container, _opensearch
 
     # Now we mimic the step function logic in code below 
 
-    # Find "large" indicies (in this case we set the threshold absurdly small for unit testing)
+    # Find "large" indices (in this case we set the threshold absurdly small for unit testing)
     large_indexes = index_sunset_handler.handler({
                                                   'step':'find_large_indexes', 
                                                   'execution_input' : {'threshold_override': .00001}
@@ -71,14 +71,14 @@ def test_index_rotation_triggers_on_large_size(opensearch_container, _opensearch
     assert status['status'] == 'COMPLETED'
 
     # Perform cleanup 
-    status = index_sunset_handler.handler(status, None)
+    index_sunset_handler.handler(status, None)
     
     # Wait a few seconds for opensearch to finish cleanup
     time.sleep(3)
 
     # ASSERTIONS
 
-    #Check the original name + "combined" is now an alias
+    # Check the original name + "combined" is now an alias
     index_alias = index_name+"-combined"
     is_alias = client.indices.exists_alias(name=index_alias)
     assert is_alias is True, f"{index_name} should have been converted to an alias"

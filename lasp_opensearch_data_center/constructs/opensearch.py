@@ -35,9 +35,6 @@ from lasp_opensearch_data_center.constructs.constants import (
 
     OPENSEARCH_SNAPSHOT_REPO_NAME,
 )
-from lasp_opensearch_data_center.constructs.constants import (
-    IngestLambdaEnv
-)
 
 class OpenSearchConstruct(Construct):
     """OpenSearch Construct to create the Open Search Domain and cluster nodes
