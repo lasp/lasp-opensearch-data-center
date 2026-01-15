@@ -420,7 +420,10 @@ class OpenSearchIndexArchivalConstruct(Construct):
             self,
             "FindLargeIndexesStep",
             lambda_function=self.sunset_lambda,
-            payload=sfn.TaskInput.from_object({"step": "find_large_indexes"}),
+            payload=sfn.TaskInput.from_object({
+                "step": "find_large_indexes",
+                "execution_input": sfn.JsonPath.string_at("$") 
+            }),
             result_path="$.find_indexes",
             payload_response_only=True
         )
