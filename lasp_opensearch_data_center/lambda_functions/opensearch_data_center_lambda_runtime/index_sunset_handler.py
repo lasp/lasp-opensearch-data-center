@@ -142,7 +142,10 @@ def find_large_indexes(event):
     large_indexes = []
 
     for index, index_size in indices:
+        print("#######")
         print(index)
+        print(index_size)
+        print(index_threshold_bytes)
         logger.debug(f"On index {index} of size {index_size} bytes")
 
         # Skip indices that have already been archived
