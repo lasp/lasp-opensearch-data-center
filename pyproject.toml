@@ -22,10 +22,7 @@ constructs = "^10.0.0"
 opensearch_data_center_lambda_runtime = {path="lasp_opensearch_data_center/lambda_functions", develop=true}
 mkdocs = "^1.6.0"
 pytest = "*"
-pytest-randomly = "*"
 testcontainers = "^4.10.0"
-openmock = "*"
-aws-lambda-powertools = {version = "^3", extras=["parser"]}
 
 [build-system]
 requires = ["poetry-core"]
