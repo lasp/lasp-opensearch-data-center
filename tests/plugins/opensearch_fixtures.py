@@ -3,7 +3,7 @@
 import pytest
 
 from testcontainers.opensearch import OpenSearchContainer
-from lasp_opensearch_data_center.lambda_functions.opensearch_data_center_lambda_runtime.helpers import get_opensearch_client
+from lasp_opensearch_data_center.lambda_functions.helpers import get_opensearch_client
 
 
 @pytest.fixture(scope='session')
