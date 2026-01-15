@@ -4,7 +4,7 @@ import logging
 # Installed
 import pytest
 from testcontainers.opensearch import OpenSearchContainer
-from lasp_opensearch_data_center.lambda_functions.opensearch_data_center_lambda_runtime.helpers import get_opensearch_client
+from lasp_opensearch_data_center.lambda_functions.helpers import get_opensearch_client
 
 @pytest.fixture
 def cleanup_loggers():
@@ -30,8 +30,8 @@ def mock_aws_credentials(monkeypatch_session):
     monkeypatch_session.setenv('AWS_SECRET_ACCESS_KEY', 'testing')
     monkeypatch_session.setenv('AWS_SECURITY_TOKEN', 'testing')
     monkeypatch_session.setenv('AWS_SESSION_TOKEN', 'testing')
+    monkeypatch_session.setenv('AWS_REGION', 'us-west-2')
     monkeypatch_session.delenv('AWS_PROFILE', raising=False)
-    monkeypatch_session.delenv('AWS_REGION', raising=False)
     monkeypatch_session.delenv('AWS_DEFAULT_REGION', raising=False)
 
 @pytest.fixture(scope="session")

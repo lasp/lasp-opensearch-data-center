@@ -13,11 +13,7 @@ import functools
 # Installed
 import boto3
 # Local
-from opensearch_data_center_lambda_runtime.helpers import (
-    get_opensearch_client,
-    configure_itdc_logging,
-    send_sns_general_alert,
-)
+from helpers import get_opensearch_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +56,6 @@ def handler(event, context):
     Lambda entry point that routes execution based on the event payload. 
     Executes scheduled large-index checks when run normally, or executes specific steps when triggered by the state machine.
     """
-    
-    configure_itdc_logging()
 
     step = event.get("step") # If the state machine is executing the event will have the "step" in it
     if step == "find_large_indexes":
@@ -82,7 +76,7 @@ def alert_on_failure(func):
     This decorator wraps a function and catches any exceptions it raises. When an exception occurs, it:
         1. Logs the full stack trace using
         2. Constructs a slack alert message
-        3. Sends the alert via `send_sns_general_alert`
+        3. Sends the alert via `send_sns_message`
         4. Re-raises the original exception
 
     This is useful for centralizing error handling and alerting 
@@ -109,8 +103,8 @@ def alert_on_failure(func):
                     "args": args,
                 }
             logger.exception(f"Error in {func.__name__}")
-            send_sns_general_alert(msg, filename="N/A")    # send alert
-            raise                                          # re-raise
+            send_sns_message("GeneralAlert", "General Alert", msg)
+            raise
     return wrapper
 
 
@@ -492,7 +486,7 @@ def cleanup_archival(event):
         msg = {
             "msg": f"Completed archival of index {index} into {new_index}",
         }
-        send_sns_general_alert(msg, filename="N/A")
+        send_sns_message("GeneralAlert", "General Alert", msg)
     except Exception as e:
         logger.error(f"Failed to send archival success message to Slack: {e}")
         raise
@@ -595,3 +589,61 @@ def reindex(index:str, new_index:str, client) -> str:
             new_index=new_index,
             original_error=e
         )
+
+def send_sns_message(error_type: str, subject: str, msg_content: dict) -> None:
+    """
+    Sends a formatted SNS notification using the AWS Chatbot-compatible message structure.
+
+    This function wraps the low-level SNS `publish()` call, adds standard metadata,
+    and logs the outcome.
+
+    Parameters
+    ----------
+    error_type : str
+        A string that categorizes the error (e.g., "IngestError", "GeneralAlert").
+        Sent as a message attribute to facilitate filtering or routing.
+    
+    subject : str
+        The subject line of the SNS message.
+    
+    msg_content : dict
+        The message body, formatted according to the AWS Chatbot `client-markdown` structure.
+        Must include keys like "textType", "title", and "description".
+    """
+    message = {
+        "textType": "client-markdown",
+        "title": subject,
+        "description": msg_content
+    }
+    sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
+    if not sns_topic_arn:
+        logger.warning("SNS_TOPIC_ARN is not set. Skipping SNS notification.")
+        return
+    logger.info("SNS_TOPIC_ARN is set. Proceeding with SNS notification.")
+
+    message = {
+        "version": "1.0",
+        "source": "custom",
+        "content": msg_content,
+        "metadata": {
+            "enableCustomActions": False,
+        }
+    }
+
+    # Send SNS notification
+    sns_client = boto3.client("sns")
+    try:
+        sns_client.publish(
+            TopicArn = sns_topic_arn,
+            Subject=subject,
+            Message=json.dumps(message),
+            MessageAttributes = {
+            "ErrorType": {
+                "DataType": "String",
+                "StringValue": error_type
+            }
+        }
+        )
+        logger.info(f"SNS ingest alert sent: {message}")
+    except Exception as e:
+        logger.exception(f"Failed to send SNS notification: {e}")
