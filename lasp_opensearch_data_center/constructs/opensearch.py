@@ -29,6 +29,9 @@ from lasp_opensearch_data_center.constructs.constants import (
     OPENSEARCH_SNAPSHOT_REPO_NAME,
 )
 
+# A century. Far larger values overflow the date arithmetic in the snapshot Lambda.
+MAX_SNAPSHOT_RETENTION_DAYS = 36500
+
 
 class OpenSearchConstruct(Construct):
     """OpenSearch Construct to create the Open Search Domain and cluster nodes
@@ -130,14 +133,24 @@ class OpenSearchConstruct(Construct):
             See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html.
         snapshot_retention_days : Optional[int], optional
             Snapshots taken by the default snapshot Lambda are deleted, through the OpenSearch snapshot API, once they
-            are older than this many days. The most recent successful snapshot is always kept. None keeps every
-            snapshot. Default is 90. Has no effect when `snapshot_lambda` is supplied.
+            are older than this many days. Must be a whole number from 1 to 36500. The Lambda recognises its snapshots by
+            name (`os_snapshot_YYYY-MM-DD-HH:MM:SS`), so give snapshots taken by other means a different name. The
+            most recent successful snapshot the Lambda took is always kept. None keeps every snapshot. Default is 90.
+            Has no effect when `snapshot_lambda` is supplied.
         """
         super().__init__(scope, construct_id)
 
-        if snapshot_retention_days is not None and snapshot_retention_days < 1:
+        # The handler parses the value with int() and subtracts it from the current date, so anything but a whole
+        # number of days in this range would fail every run. bool is excluded explicitly because it is a subclass of
+        # int.
+        if snapshot_retention_days is not None and (
+            isinstance(snapshot_retention_days, bool)
+            or not isinstance(snapshot_retention_days, int)
+            or not 1 <= snapshot_retention_days <= MAX_SNAPSHOT_RETENTION_DAYS
+        ):
             raise ValueError(
-                f"snapshot_retention_days must be a positive number of days or None, got {snapshot_retention_days}"
+                f"snapshot_retention_days must be a whole number of days from 1 to {MAX_SNAPSHOT_RETENTION_DAYS}, "
+                f"or None, got {snapshot_retention_days!r}"
             )
 
         # User warnings

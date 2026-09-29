@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 import os
 import string
-from typing import Callable, List, Optional
+from typing import List, Optional
 # Installed
 import boto3
 import requests
@@ -25,14 +25,24 @@ snapshot_role_arn = os.environ["SNAPSHOT_ROLE_ARN"]
 # Unset or empty disables pruning, so every snapshot is kept
 snapshot_retention_days = os.environ.get("SNAPSHOT_RETENTION_DAYS", "")
 
-# Only snapshots this handler created are candidates for deletion
+# Snapshots are named SNAPSHOT_NAME_PREFIX followed by their start time in SNAPSHOT_TIME_FORMAT. Pruning only
+# considers names in exactly this form. The name cannot prove this handler took a snapshot, so a snapshot taken by
+# other means is left alone only if it is named differently.
 SNAPSHOT_NAME_PREFIX = "os_snapshot_"
+SNAPSHOT_TIME_FORMAT = "%Y-%m-%d-%H:%M:%S"
 # Bounds the work done deleting in one invocation. A repository with a large backlog of expired snapshots is
 # drained over several daily runs rather than in one.
 MAX_DELETIONS_PER_RUN = 20
-# Deleting a snapshot is synchronous and can take minutes on a large repository. Pruning stops starting new
-# deletions once less than this much of the invocation remains, which leaves time to take the day's snapshot.
-RESERVED_SECONDS_FOR_SNAPSHOT = 180
+# Only snapshots in a finished state are deleted. The listing leaves the state out when the repository has no record
+# of it, and such a snapshot is kept rather than guessed about.
+DELETABLE_STATES = ("SUCCESS", "FAILED", "PARTIAL")
+# Timeout for the snapshot listing. `requests` applies it to connecting and to each wait for data, not to the whole
+# response.
+LISTING_TIMEOUT_SECONDS = 120
+# How long to wait for the deletion request to answer. OpenSearch queues a deletion while a snapshot is writing to
+# the same repository, and the day's snapshot has just been requested, so the deletion normally cannot finish
+# within one invocation. The request is left running on the cluster once this wait is over.
+DELETE_WAIT_SECONDS = 60
 
 # AWS service and credentials to pass to the opensearch python library
 service = "es"
@@ -79,6 +89,28 @@ def take_snapshot(url: string):
     return r
 
 
+def snapshot_name(start_time: datetime) -> str:
+    """Name of the snapshot this handler takes at `start_time`"""
+    return SNAPSHOT_NAME_PREFIX + start_time.strftime(SNAPSHOT_TIME_FORMAT)
+
+
+def snapshot_start_time(name: str) -> datetime:
+    """Start time encoded in a name `snapshot_name` produced, as a UTC datetime"""
+    return datetime.strptime(name[len(SNAPSHOT_NAME_PREFIX):], SNAPSHOT_TIME_FORMAT).replace(tzinfo=timezone.utc)
+
+
+def is_handler_snapshot_name(name: str) -> bool:
+    """Whether `name` is exactly in the form `snapshot_name` produces"""
+    if not name.startswith(SNAPSHOT_NAME_PREFIX):
+        return False
+    timestamp = name[len(SNAPSHOT_NAME_PREFIX):]
+    try:
+        # strptime accepts unpadded fields, so compare the round trip rather than trusting the parse alone
+        return datetime.strptime(timestamp, SNAPSHOT_TIME_FORMAT).strftime(SNAPSHOT_TIME_FORMAT) == timestamp
+    except ValueError:
+        return False
+
+
 def select_snapshots_to_delete(
     snapshots: List[dict],
     now: datetime,
@@ -87,15 +119,18 @@ def select_snapshots_to_delete(
 ) -> List[str]:
     """Choose which snapshots have aged out of the retention window
 
-    Only snapshots named with SNAPSHOT_NAME_PREFIX are considered, so snapshots taken by hand or by other tooling
-    are never deleted. The most recent SUCCESS snapshot is always kept, even when it is older than the retention
-    window, so a run of failed snapshots can never prune the repository down to nothing restorable. Snapshots that
-    are still IN_PROGRESS are skipped.
+    Only snapshots whose names are exactly in the form `snapshot_name` produces are considered, and each one's age is
+    read from its name. A snapshot taken by hand or by other tooling is never deleted unless it is given a name in
+    that form. The most recent SUCCESS snapshot among those considered, ignoring names dated after `now`, is always
+    kept even when it is older than the retention window, so a run of failed snapshots never prunes away the last one
+    the repository reports as successful. That is a record of the snapshot, not proof it can be restored: files
+    removed from the bucket by other means are not detected. Only snapshots in DELETABLE_STATES are deleted, so
+    IN_PROGRESS snapshots, which a deletion would abort, and snapshots with no recorded state are kept.
 
     Parameters
     ----------
     snapshots : list[dict]
-        Entries from the get-snapshots API, each with "snapshot", "state" and "start_time_in_millis".
+        Entries from the get-snapshots API, each with "snapshot" and "state".
     now : datetime
         Timezone-aware current time.
     retention_days : int
@@ -109,30 +144,37 @@ def select_snapshots_to_delete(
         Snapshot names to delete, oldest first.
     """
     ours = [
-        s for s in snapshots
-        if s.get("snapshot", "").startswith(SNAPSHOT_NAME_PREFIX) and "start_time_in_millis" in s
+        (snapshot_start_time(s["snapshot"]), s) for s in snapshots if is_handler_snapshot_name(s.get("snapshot", ""))
     ]
-    successful = [s for s in ours if s.get("state") == "SUCCESS"]
-    newest_success: Optional[str] = (
-        max(successful, key=lambda s: s["start_time_in_millis"])["snapshot"] if successful else None
-    )
-    cutoff_millis = int((now - timedelta(days=retention_days)).timestamp() * 1000)
+    # A name dated in the future (a clock error, or one given by hand) must not take the place of the real newest
+    successful = [(started, s) for started, s in ours if s.get("state") == "SUCCESS" and started <= now]
+    newest_success: Optional[str] = max(successful, key=lambda pair: pair[0])[1]["snapshot"] if successful else None
+    cutoff = now - timedelta(days=retention_days)
 
     expired = [
-        s for s in ours
-        if s["start_time_in_millis"] < cutoff_millis
-        and s.get("state") != "IN_PROGRESS"
+        (started, s) for started, s in ours
+        if started < cutoff
+        and s.get("state") in DELETABLE_STATES
         and s["snapshot"] != newest_success
     ]
-    expired.sort(key=lambda s: s["start_time_in_millis"])
-    return [s["snapshot"] for s in expired[:max_deletions]]
+    expired.sort(key=lambda pair: pair[0])
+    return [s["snapshot"] for _, s in expired[:max_deletions]]
 
 
-def prune_expired_snapshots(repo_url: str, retention_days: int, remaining_seconds: Callable[[], float]) -> List[str]:
+def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
     """Delete snapshots older than the retention window through the OpenSearch snapshot API
 
     Deleting through the API, rather than expiring objects in S3, is what keeps the repository consistent: OpenSearch
     removes only the files that no remaining snapshot references.
+
+    The listing uses verbose=false, which OpenSearch answers from the repository index alone. A verbose listing also
+    reads each snapshot's own metadata file and fails outright if any one is missing, as it is for snapshots whose
+    files an S3 expiry rule removed; those are exactly the snapshots that most need deleting.
+
+    All selected snapshots are deleted in a single request. If it has not answered within DELETE_WAIT_SECONDS, or the
+    endpoint answers 504, it is left running on the cluster. If a selected snapshot no longer exists (another
+    deletion finished first), OpenSearch rejects the whole request. In each case the next run's listing selects
+    again whatever was not deleted.
 
     Parameters
     ----------
@@ -140,25 +182,17 @@ def prune_expired_snapshots(repo_url: str, retention_days: int, remaining_second
         Snapshot repository URL, e.g. https://<endpoint>/_snapshot/<repo>
     retention_days : int
         Retention window in days.
-    remaining_seconds : Callable[[], float]
-        Returns the seconds left in this invocation. No request is started within the last
-        RESERVED_SECONDS_FOR_SNAPSHOT seconds, and each request's timeout is capped so this handler stops waiting
-        before then. A timed-out delete keeps running on the cluster; only this handler stops waiting for it.
 
     Returns
     -------
     list[str]
-        Names of the snapshots that were deleted.
+        Names of the snapshots whose deletion was requested.
     """
-    budget = remaining_seconds() - RESERVED_SECONDS_FOR_SNAPSHOT
-    if budget <= 0:
-        logger.info("Skipping pruning to leave time for the snapshot.")
-        return []
     response = requests.get(
         f"{repo_url}/_all",
         auth=awsauth,
-        params={"filter_path": "snapshots.snapshot,snapshots.state,snapshots.start_time_in_millis"},
-        timeout=budget,
+        params={"verbose": "false", "filter_path": "snapshots.snapshot,snapshots.state"},
+        timeout=LISTING_TIMEOUT_SECONDS,
     )
     if response.status_code != 200:
         raise Exception(f"Listing snapshots failed: {response.status_code}.{response.text}")
@@ -169,34 +203,48 @@ def prune_expired_snapshots(repo_url: str, retention_days: int, remaining_second
         f"{len(snapshots)} snapshots in repository, {len(to_delete)} selected for deletion "
         f"(retention {retention_days} days, at most {MAX_DELETIONS_PER_RUN} per run)."
     )
+    if not to_delete:
+        return []
 
-    deleted = []
-    for name in to_delete:
-        budget = remaining_seconds() - RESERVED_SECONDS_FOR_SNAPSHOT
-        if budget <= 0:
-            logger.info(f"Stopping after {len(deleted)} deletions to leave time for the snapshot.")
-            break
-        response = requests.delete(f"{repo_url}/{name}", auth=awsauth, timeout=budget)
-        if response.status_code != 200:
-            raise Exception(f"Deleting snapshot {name} failed: {response.status_code}.{response.text}")
-        logger.info(f"Deleted expired snapshot {name}.")
-        deleted.append(name)
-    return deleted
+    try:
+        response = requests.delete(f"{repo_url}/{','.join(to_delete)}", auth=awsauth, timeout=DELETE_WAIT_SECONDS)
+    except requests.exceptions.ReadTimeout:
+        # The request was sent (failing to connect raises ConnectTimeout or ConnectionError instead, which fail the
+        # invocation). OpenSearch answers a deletion only once it completes, and abandoning the wait does not cancel it.
+        logger.warning(
+            f"Deletion of {to_delete} did not finish within {DELETE_WAIT_SECONDS} seconds and continues on the cluster."
+        )
+        return to_delete
+    if response.status_code == 504:
+        # AWS documents this for taking snapshots, and it is applied here to deleting them: "Long-running snapshot
+        # operations sometimes encounter the following error: 504 GATEWAY_TIMEOUT. You can typically ignore these
+        # errors and wait for the operation to complete successfully." (Amazon OpenSearch Service, "Take a snapshot")
+        logger.warning(f"Deletion of {to_delete} timed out at the endpoint (504); it typically still completes.")
+        return to_delete
+    if response.status_code == 404:
+        logger.warning(
+            f"A snapshot in {to_delete} no longer exists, so none were deleted; the next run selects them again. "
+            f"{response.text}"
+        )
+        return []
+    if response.status_code != 200:
+        raise Exception(f"Deleting snapshots {to_delete} failed: {response.status_code}.{response.text}")
+    logger.info(f"Deleted expired snapshots {to_delete}.")
+    return to_delete
 
 
 def handler(event, context):
     """Top level handler for Lambda invocation for the Snapshot Handler lambda
 
     The following handler creates a snapshot of an OpenSearch instance, parameterized
-    by environment variables.
+    by environment variables, and then prunes expired snapshots when SNAPSHOT_RETENTION_DAYS is set.
     """
     # Setup logging
     # Generate new snapshot name with current timestamp
-    snapshot_start_time: str = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H:%M:%S")
-    snapshot_name = f"os_snapshot_{snapshot_start_time}"
+    new_snapshot_name = snapshot_name(datetime.now(timezone.utc))
     print("Testing printing")
     logging.basicConfig(level=logging.INFO, force=True)  # Overwrites the pre-existing handler added by Lambda
-    logger.info(f"Starting process for snapshot: {snapshot_name}.")
+    logger.info(f"Starting process for snapshot: {new_snapshot_name}.")
 
     # Register the snapshot, this can be run every time, if the repo is registered will return 200
     try:
@@ -222,39 +270,30 @@ def handler(event, context):
         )
         raise
 
-    # Prune before taking the new snapshot so deletions have normally finished by the time it starts (a delete this
-    # handler stopped waiting for may still be running). A pruning failure must not cost the day's snapshot, so it
-    # is recorded here and raised only after the snapshot has been requested.
-    pruning_error: Optional[Exception] = None
-    if snapshot_retention_days:
-        try:
-            prune_expired_snapshots(
-                host + f"_snapshot/{snapshot_repo_name}",
-                int(snapshot_retention_days),
-                lambda: context.get_remaining_time_in_millis() / 1000,
-            )
-        except Exception as e:
-            logger.error(f"Pruning expired snapshots failed: {e}")
-            pruning_error = e
-    else:
-        logger.info("SNAPSHOT_RETENTION_DAYS is not set; keeping all snapshots.")
-
     # Initiate a new manual snapshot
     logger.info("Requesting a new snapshot be taken.")
     try:
-        path = f"_snapshot/{snapshot_repo_name}/{snapshot_name}"
+        path = f"_snapshot/{snapshot_repo_name}/{new_snapshot_name}"
         url = host + path
         response = take_snapshot(url)
         if response.status_code == 200:
-            logger.info(f"Snapshot {snapshot_name} initiated.")
+            logger.info(f"Snapshot {new_snapshot_name} initiated.")
         else:
             raise Exception(f"{response.status_code}.{response.text}")
     except Exception as e:
         logger.info(
-            f"Snapshot initiation for {snapshot_name} failed with error code/text: {e}"
+            f"Snapshot initiation for {new_snapshot_name} failed with error code/text: {e}"
         )
         raise
     logger.info("Response looks good. Snapshot should be in the bucket.")
 
-    if pruning_error is not None:
-        raise pruning_error
+    # Prune only once the day's snapshot has been requested, so that no failure or delay in pruning can prevent it.
+    # While the new snapshot is still writing, OpenSearch queues the deletion behind it. The new snapshot is inside
+    # the retention window, so pruning cannot select it.
+    if snapshot_retention_days:
+        retention_days = int(snapshot_retention_days)
+        if retention_days < 1:
+            raise ValueError(f"SNAPSHOT_RETENTION_DAYS must be at least 1, got {snapshot_retention_days!r}")
+        prune_expired_snapshots(host + f"_snapshot/{snapshot_repo_name}", retention_days)
+    else:
+        logger.info("SNAPSHOT_RETENTION_DAYS is not set; keeping all snapshots.")
