@@ -14,7 +14,10 @@ will prevent destruction of the Stack itself, leaving it in a failed state).
 
 - Dropbox bucket for handling new files (dropbox pre-processor reads from here)
 - Ingest bucket for storing valid new files (ingest processor reads from here)
-- Opensearch snapshot storage bucket (Opensearch saves index snapshots here)
+- Opensearch snapshot storage bucket (Opensearch saves index snapshots here). This bucket has no lifecycle
+  expiration rule, and must not be given one: snapshots are incremental, so each snapshot relies on files uploaded
+  by earlier ones, and expiring objects by age silently corrupts current snapshots. Retention is handled by the
+  snapshot Lambda in the OpenSearch construct instead (see `snapshot_retention_days`).
 
 # Example Usage in Stack
 

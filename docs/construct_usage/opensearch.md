@@ -7,7 +7,10 @@ the responsibility of the user implementing a CDK application (e.g. a data cente
 ## Components
 
 - OpenSearch Domain (cluster and nodes), with attached access policy for configured IP range
-- Lambda function for taking snapshots of opensearch indexes, scheduled to run daily
+- Lambda function for taking snapshots of opensearch indexes, scheduled to run daily. Before each snapshot it
+  deletes, through the OpenSearch snapshot API, the `os_snapshot_*` snapshots it creates that are older than
+  `snapshot_retention_days` (default 90; `None` keeps everything). The most recent successful snapshot is always
+  kept, and at most 20 are deleted per run, so a large backlog is cleared over several days.
 
 # Example Usage in Stack
 

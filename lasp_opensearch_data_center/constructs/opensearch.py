@@ -63,6 +63,7 @@ class OpenSearchConstruct(Construct):
         snapshot_schedule: events.Schedule = events.Schedule.cron(
             minute="0", hour="9", month="*", week_day="*", year="*"
         ),
+        snapshot_retention_days: Optional[int] = 90,
     ) -> None:
         """
         Construct init.
@@ -127,8 +128,17 @@ class OpenSearchConstruct(Construct):
         snapshot_schedule : events.Schedule
             Cron schedule on which to run the snapshot Lambda. Default is 9am UTC daily.
             See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html.
+        snapshot_retention_days : Optional[int], optional
+            Snapshots taken by the default snapshot Lambda are deleted, through the OpenSearch snapshot API, once they
+            are older than this many days. The most recent successful snapshot is always kept. None keeps every
+            snapshot. Default is 90. Has no effect when `snapshot_lambda` is supplied.
         """
         super().__init__(scope, construct_id)
+
+        if snapshot_retention_days is not None and snapshot_retention_days < 1:
+            raise ValueError(
+                f"snapshot_retention_days must be a positive number of days or None, got {snapshot_retention_days}"
+            )
 
         # User warnings
         if "127.0.0.1/32" in opensearch_ip_access_range and len(opensearch_ip_access_range) == 0:
@@ -283,6 +293,8 @@ class OpenSearchConstruct(Construct):
                     "SNAPSHOT_S3_BUCKET": self.opensearch_snapshot_bucket.bucket_name,
                     "SNAPSHOT_ROLE_ARN": self.opensearch_snapshot_role.role_arn,
                     "SNAPSHOT_REPO_NAME": snapshot_repo_name,
+                    # Empty disables pruning in the handler
+                    "SNAPSHOT_RETENTION_DAYS": "" if snapshot_retention_days is None else str(snapshot_retention_days),
                 },
                 timeout=Duration.seconds(60 * 15),
                 memory_size=512,

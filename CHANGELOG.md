@@ -1,4 +1,13 @@
 # Version Changes
+## v1.0.9 (unreleased)
+- Fixed OpenSearch snapshots being corrupted by the snapshot bucket's 90-day S3 expiration rule. Snapshots are
+  incremental, so expiring objects by age deleted files that current snapshots still depended on. Since v1.0.8
+  turned bucket versioning off by default, those deletions were permanent. The rule is removed.
+- The snapshot Lambda now enforces retention through the OpenSearch snapshot API, which only deletes files no
+  remaining snapshot references. Configure with the new `snapshot_retention_days` argument to `OpenSearchConstruct`
+  (default 90, `None` keeps all snapshots).
+- Added unit tests for the snapshot bucket configuration and the retention logic.
+
 ## v1.0.8 (released)
 - Updated the max file size check for incoming files to the Dropbox Lambda and set limit to 30MB.
 - Made S3 bucket versioning a configurable parameter.
