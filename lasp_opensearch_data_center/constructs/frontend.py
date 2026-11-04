@@ -144,18 +144,27 @@ class FrontendConstruct(Construct):
             description="CI CD automated frontend policy",
             managed_policy_name=frontend_policy_name,
             roles=[self.frontend_deployment_role],
-            # A deploy replaces the site's files under frontend/: it lists what is there, uploads (in parts for a file
-            # of 8 MiB or more, which it may cancel), deletes what the new build no longer has, and may read or copy
-            # files already there, which needs s3:GetObject on the source
             statements=[
+                # Lists the files in the site bucket (s3:ListBucket does not list the account's buckets), so a deploy
+                # can compare the new build with what is already there
                 aws_iam.PolicyStatement(
                     effect=aws_iam.Effect.ALLOW,
                     actions=["s3:ListBucket"],
                     resources=[frontend_bucket.bucket_arn],
                 ),
+                # All the site's files are under frontend/. A deploy uploads them (in parts for large files, which it
+                # may cancel) and deletes those the new build no longer has. It may also read or copy those already
+                # there, and S3 needs s3:PutObjectTagging to upload or copy a file with tags.
                 aws_iam.PolicyStatement(
                     effect=aws_iam.Effect.ALLOW,
-                    actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+                    actions=[
+                        "s3:GetObject",
+                        "s3:GetObjectTagging",
+                        "s3:PutObject",
+                        "s3:PutObjectTagging",
+                        "s3:DeleteObject",
+                        "s3:AbortMultipartUpload",
+                    ],
                     resources=[frontend_bucket.bucket_arn + "/frontend/*"],
                 ),
             ],

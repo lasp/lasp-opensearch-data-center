@@ -1,6 +1,7 @@
 """Open Search Stack"""
 
 # Standard
+import ipaddress
 from pathlib import Path
 from typing import Optional
 import warnings
@@ -114,9 +115,9 @@ class OpenSearchConstruct(Construct):
             Number of OpenSearch manager nodes to deploy. Using 3 manager nodes is recommended for production environments
             to ensure high availability and cluster stability.
         opensearch_ip_access_range : list[str], optional
-            List of IP CIDR blocks on which to allow OpenSearch domain access (e.g. for security purposes).
-            Default is ["127.0.0.1/32"]. 
-            Note: leaving this unchanged will raise a warning no one can access your opensearch cluster.
+            List of IP addresses or CIDR blocks from which the OpenSearch domain may be called, such as
+            ["192.0.2.0/24", "198.51.100.7"]. Anything else, including None, an empty list or a single string, raises
+            `ValueError`. Default is ["127.0.0.1/32"], which no client can use, so leaving it unchanged warns.
         opensearch_volume_size : int, optional
             The size, in GB, of the OpenSearch domain's underlying EBS storage. Default is 50GB.
         tls_security_policy : opensearch.TLSSecurityPolicy, optional
@@ -134,7 +135,25 @@ class OpenSearchConstruct(Construct):
         """
         super().__init__(scope, construct_id)
 
-        # User warnings
+        # The domain's access policy lets anyone call it from these ranges and from nowhere else, so accept only a
+        # non-empty list of addresses or CIDR blocks. A None range would put an empty condition in the policy.
+        if not isinstance(opensearch_ip_access_range, list) or not opensearch_ip_access_range:
+            raise ValueError(
+                "opensearch_ip_access_range must be a non-empty list of IP addresses or CIDR blocks, such as "
+                f'["192.0.2.0/24"], but is {opensearch_ip_access_range!r}'
+            )
+        for ip_range in opensearch_ip_access_range:
+            # ip_network would read an integer as an address (24 as 0.0.0.24), so only strings are accepted
+            if not isinstance(ip_range, str):
+                raise ValueError(f"opensearch_ip_access_range holds {ip_range!r}, which is not a string")
+            try:
+                # Refuses a block with bits set after its prefix ("10.1.1.1/16"), which usually means a typo
+                ipaddress.ip_network(ip_range)
+            except ValueError as error:
+                raise ValueError(
+                    f"opensearch_ip_access_range holds {ip_range!r}, which is not an IP address or CIDR block: {error}"
+                ) from error
+
         # The default range is only the loopback address, which no client of the domain can come from
         if opensearch_ip_access_range == ["127.0.0.1/32"]:
             warnings.warn(

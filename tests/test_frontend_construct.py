@@ -142,14 +142,22 @@ def test_deploy_user_has_no_permissions_of_its_own(built):
 
 
 def test_deploy_policy_reaches_only_the_site_bucket_and_its_frontend_prefix(built):
-    """The deploy role may list the site bucket and read, upload, replace and delete files under frontend/, nothing more."""
+    """The deploy role may list the site bucket and read, upload, tag, replace and delete files under frontend/,
+    nothing more."""
     role_id = only_resource_id(built.template, "AWS::IAM::Role", {"RoleName": "frontend-deploy-role"})
     assert_same_statements(
         role_policy_statements(built.template, role_id),
         [
             {"Action": "s3:ListBucket", "Effect": "Allow", "Resource": built.bucket_arn()},
             {
-                "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+                "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectTagging",
+                    "s3:PutObject",
+                    "s3:PutObjectTagging",
+                    "s3:DeleteObject",
+                    "s3:AbortMultipartUpload",
+                ],
                 "Effect": "Allow",
                 "Resource": {"Fn::Join": ["", [built.bucket_arn(), "/frontend/*"]]},
             },

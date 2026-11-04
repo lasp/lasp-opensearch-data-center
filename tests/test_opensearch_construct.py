@@ -291,6 +291,34 @@ def test_access_policy_allows_exactly_the_given_ranges():
     assert statements[0]["Condition"] == {"IpAddress": {"aws:SourceIp": ranges}}
 
 
+@pytest.mark.parametrize("ranges", [
+    None,
+    "",
+    [],
+    # A single string, not a list of them
+    "192.0.2.0/24",
+    [""],
+    ["not-a-cidr"],
+    # Bits set after the /24 prefix
+    ["192.0.2.1/24"],
+    ["192.0.2.0/33"],
+    # ipaddress would read the integer as 0.0.0.24
+    [24],
+    ["192.0.2.0/24", None],
+])
+def test_refuses_an_access_range_that_is_not_a_list_of_addresses_or_blocks(ranges):
+    """Only a non-empty list of IP addresses or CIDR blocks may go into the domain's access policy."""
+    with pytest.raises(ValueError, match="opensearch_ip_access_range"):
+        _build(opensearch_ip_access_range=ranges)
+
+
+def test_accepts_single_addresses_and_ipv6_blocks():
+    """A bare address (one host) and an IPv6 block are both valid sources for the access policy."""
+    ranges = ["198.51.100.7", "2001:db8::/32"]
+    statements = _access_policy_statements(_template(opensearch_ip_access_range=ranges))
+    assert statements[0]["Condition"] == {"IpAddress": {"aws:SourceIp": ranges}}
+
+
 @pytest.mark.parametrize("ranges, warns", [
     (["127.0.0.1/32"], True),
     (["192.0.2.0/24"], False),

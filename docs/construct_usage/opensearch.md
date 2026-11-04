@@ -56,9 +56,9 @@ class OpenSearch(Stack):
             opensearch_data_node_instance_type="t3.medium.search",  # Always use *.search instances for opensearch
             opensearch_data_node_count=1,
             opensearch_manager_node_instance_type="t3.medium.search",
-            opensearch_manager_node_count=1
+            opensearch_manager_node_count=1,
             opensearch_domain_name="opensearch-testing",  # Name of domain, shows up in console
-            opensearch_ip_access_range="10.1.1.1/16",  # Replace with custom IP range to control OpenSearch access
+            opensearch_ip_access_range=["10.1.0.0/16"],  # Replace with the addresses or CIDR blocks that may call OpenSearch
             removal_policy=RemovalPolicy.DESTROY  # Modify this as needed for data persistence requirements
         )
 ```
