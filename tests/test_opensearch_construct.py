@@ -1,6 +1,7 @@
 """Tests for the OpenSearch domain, snapshot role and snapshot Lambda that OpenSearchConstruct creates
 
-Snapshot retention is not tested here: #56 adds it, with its own tests.
+The bounds of snapshot_retention_days, and the handler's pruning, are tested in test_snapshot_retention_cdk.py and
+test_snapshot_handler.py.
 """
 # Standard
 import json
