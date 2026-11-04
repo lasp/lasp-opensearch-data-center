@@ -1,0 +1,52 @@
+name: Unit tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # No later step needs git credentials, and the tests run the pull request's own code
+          persist-credentials: false
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Poetry
+        run: pipx install poetry==2.2.1
+
+      # The repository has no poetry.lock, so this resolves the newest versions pyproject.toml allows, as a new
+      # user of the library gets. It installs the dev group too, which includes the snapshot Lambda's runtime.
+      - name: Install the library and its dev dependencies
+        run: poetry install
+
+      - name: Run the unit tests
+        run: poetry run pytest tests/
+
+  lambda-image:
+    name: Build the Lambda image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # The synth tests stage the Lambda's Docker context but never build it, so a broken Dockerfile or an
+      # unresolvable runtime dependency would otherwise first show up in a consumer's deploy.
+      - name: Build the snapshot Lambda target
+        run: docker build --target snapshot-lambda lasp_opensearch_data_center/lambda
