@@ -1,9 +1,9 @@
 # Unit tests
 
 These tests synthesize each construct into a CloudFormation template, with `aws_cdk.assertions`, and check the
-resources in it. They make no AWS calls: every test stack uses the made-up account `123456789012`, and hosted zones and
-certificates are imported by attributes or answered from a stub lookup (`hosted_zone_context()` in
-`construct_helpers.py`).
+resources in it. They make no AWS calls, since synthesizing never does: the CDK CLI makes the lookups, and the tests
+answer them from context instead (`hosted_zone_context()` in `construct_helpers.py` for hosted zones, and the
+availability zones in `test_networking_construct.py`). Every test stack uses the made-up account `123456789012`.
 
 ## Running them
 
@@ -23,16 +23,18 @@ Run workflow** and pick a branch. GitHub offers that button only once the workfl
 |------|-----------|----------------------|
 | `test_backend_storage_construct.py` | `BackendStorageConstruct` | Bucket names, removal and versioning; queue visibility timeouts, retention and dead-letter settings; which bucket prefixes notify which queue; the upload role's trust and its exact S3 permissions |
 | `test_certificate_construct.py` | `CertificateConstruct` | The wildcard certificate, its DNS validation, and the exported certificate ARN |
-| `test_frontend_construct.py` | `FrontendConstruct` | The us-east-1 requirement; the guest identity pool and role; the deploy user, role and deploy policy (the S3 actions on the site's files are not yet checked); the certificate, WAF IP set and rules; the CloudFront distribution, its bucket policy and the DNS alias |
+| `test_frontend_construct.py` | `FrontendConstruct` | The us-east-1 requirement; the guest identity pool and role; the deploy user, role and deploy policy (the S3 actions on the site bucket and its `frontend/` files are not yet checked); the certificate, WAF IP set and rules; the CloudFront distribution, its bucket policy and the DNS alias |
 | `test_frontend_storage_construct.py` | `FrontendStorageConstruct` | The site bucket's name, ACL setting and removal, and the us-east-1 requirement |
 | `test_ingest_orchestration_construct.py` | `IngestProcessingConstruct` | The ingest status table and its backup; each Lambda's environment, queue and permissions (the S3 actions are not yet checked) |
 | `test_networking_construct.py` | `NetworkingComponentsConstruct` | The VPC's CIDR, subnets, routes and the absence of NAT gateways |
 | `test_opensearch_construct.py` | `OpenSearchConstruct` | The domain's nodes, version, storage, encryption, endpoint, TLS policy, logs, removal and access policy; the snapshot role; the snapshot Lambda's environment, image, limits, permissions and schedule |
 
 A test of an argument passes a value other than its default and finds it in the template, so a construct that drops
-the argument fails it. An IAM test gathers a role's statements from every policy attached to it
-(`role_policy_statements()` in `construct_helpers.py`) and compares them with the full list expected (apart from the S3
-actions the table names), so a grant added through another policy fails it too.
+the argument fails it. An IAM test (`role_policy_statements()` in `construct_helpers.py`) gathers a role's statements
+from its inline policies and from every `AWS::IAM::Policy` and `AWS::IAM::ManagedPolicy` that names it, and compares
+them with the full list expected (apart from the S3 actions the table names), so a grant added through another policy
+fails it too. The statements of a policy AWS manages are not in the template, so the test requires the role to have
+exactly the expected ones of those.
 
 ## What they do not cover
 
