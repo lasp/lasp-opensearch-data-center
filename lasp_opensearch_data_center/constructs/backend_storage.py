@@ -65,18 +65,17 @@ class BackendStorageConstruct(Construct):
 
         # S3 bucket to store the snapshot data
         # The data is stored in native Lucene format
+        # NOTE: This bucket must never have an S3 expiration lifecycle rule. Snapshots are incremental: each new
+        # snapshot references files uploaded by earlier snapshots rather than re-uploading them, so an object's age
+        # says nothing about whether a current snapshot still needs it. Expiring objects by age silently corrupts
+        # recent snapshots. Old snapshots are pruned by the snapshot Lambda through the OpenSearch snapshot API,
+        # which only removes files that no remaining snapshot references.
         self.opensearch_snapshot_bucket = s3.Bucket(
             self,
             "OSSnapshotBucket",
             bucket_name=opensearch_snapshot_bucket_name,
             removal_policy=RemovalPolicy.DESTROY,
             versioned=enable_bucket_versioning,
-            lifecycle_rules=[
-                # Define the lifecycle rule to delete objects after 90 days
-                s3.LifecycleRule(
-                    expiration=Duration.days(90)
-                )
-            ]
         )
 
         # NOTE: We arguably don't need this queue but I don't think it will do any harm and may provide visibility.
