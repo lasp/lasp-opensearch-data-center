@@ -162,7 +162,7 @@ class OpenSearchConstruct(Construct):
             )
 
         # The domain's access policy lets anyone, signed in or not, call it from these ranges, so accept only a
-        # non-empty list of addresses or CIDR blocks. A None range would put an empty condition in the policy.
+        # non-empty list of addresses or CIDR blocks. An empty list would leave the policy's aws:SourceIp empty.
         if not isinstance(opensearch_ip_access_range, list) or not opensearch_ip_access_range:
             raise ValueError(
                 "opensearch_ip_access_range must be a non-empty list of IP addresses or CIDR blocks, such as "
