@@ -1,6 +1,10 @@
 # Version Changes
 ## v1.0.9 (released)
 - Added a `tls_security_policy` parameter to `OpenSearchConstruct`, defaulting to `TLS_1_2_PFS` (AWS's most secure TLS policy).
+- Requires Python 3.13 or later (was 3.9), and `aws-cdk-lib` 2.178.0 or later: `IngestProcessingConstruct` uses
+  `dynamodb.PointInTimeRecoverySpecification`, first in 2.178.0, and `OpenSearchConstruct` uses
+  `TLSSecurityPolicy.TLS_1_2_PFS`, first in 2.119.0. The snapshot Lambda's image now uses Python 3.13, and its unused
+  `cloudpathlib` dependency is removed.
 
 ## v1.0.8 (released)
 - Updated the max file size check for incoming files to the Dropbox Lambda and set limit to 30MB.

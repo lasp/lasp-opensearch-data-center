@@ -1,5 +1,5 @@
 # Base python image with poetry.lock, custom virtual environment, and the libera_cdk package files.
-FROM public.ecr.aws/docker/library/python:3.11-slim AS lambda-base
+FROM public.ecr.aws/docker/library/python:3.13-slim AS lambda-base
 # Turn off interactive shell to suppress configuration errors
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LIBERA_WORKDIR=/opt/libera
