@@ -16,7 +16,7 @@
   must not begin with a slash, which can lead to a 403.
 - `OpenSearchConstruct` now warns when `opensearch_ip_access_range` is left at its default, as its docstring said.
 - `OpenSearchConstruct` raises `ValueError` unless `opensearch_ip_access_range` is a non-empty list of IP addresses
-  or CIDR blocks. None used to give the domain's access policy an empty condition, and a single string, which the
+  or CIDR blocks, in CIDR notation. None used to give the domain's access policy an empty condition, and a single string, which the
   usage docs showed, is no longer accepted.
 - Corrected docstrings: `account_type` on `FrontendConstruct` is unused, `opensearch_version` is an `EngineVersion`.
 

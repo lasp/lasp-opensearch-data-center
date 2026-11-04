@@ -3,6 +3,7 @@
 # Standard
 import ipaddress
 from pathlib import Path
+import re
 from typing import Optional
 import warnings
 
@@ -135,7 +136,7 @@ class OpenSearchConstruct(Construct):
         """
         super().__init__(scope, construct_id)
 
-        # The domain's access policy lets anyone call it from these ranges and from nowhere else, so accept only a
+        # The domain's access policy lets anyone, signed in or not, call it from these ranges, so accept only a
         # non-empty list of addresses or CIDR blocks. A None range would put an empty condition in the policy.
         if not isinstance(opensearch_ip_access_range, list) or not opensearch_ip_access_range:
             raise ValueError(
@@ -146,6 +147,11 @@ class OpenSearchConstruct(Construct):
             # ip_network would read an integer as an address (24 as 0.0.0.24), so only strings are accepted
             if not isinstance(ip_range, str):
                 raise ValueError(f"opensearch_ip_access_range holds {ip_range!r}, which is not a string")
+            # IAM reads only CIDR notation, an address with an optional prefix length, while ip_network would also
+            # accept a netmask ("/255.0.0.0"), a zero-padded length ("/08") or an IPv6 zone ("%eth0")
+            prefix_length = ip_range.partition("/")[2]
+            if "%" in ip_range or (prefix_length and not re.fullmatch(r"0|[1-9][0-9]*", prefix_length)):
+                raise ValueError(f"opensearch_ip_access_range holds {ip_range!r}, which is not in CIDR notation")
             try:
                 # Refuses a block with bits set after its prefix ("10.1.1.1/16"), which usually means a typo
                 ipaddress.ip_network(ip_range)

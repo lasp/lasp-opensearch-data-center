@@ -145,8 +145,8 @@ class FrontendConstruct(Construct):
             managed_policy_name=frontend_policy_name,
             roles=[self.frontend_deployment_role],
             statements=[
-                # Lists the files in the site bucket (s3:ListBucket does not list the account's buckets), so a deploy
-                # can compare the new build with what is already there
+                # Lists the files in the site bucket, so a deploy can see which are already there. s3:ListBucket does
+                # not list the account's buckets.
                 aws_iam.PolicyStatement(
                     effect=aws_iam.Effect.ALLOW,
                     actions=["s3:ListBucket"],
@@ -154,7 +154,8 @@ class FrontendConstruct(Construct):
                 ),
                 # All the site's files are under frontend/. A deploy uploads them (in parts for large files, which it
                 # may cancel) and deletes those the new build no longer has. It may also read or copy those already
-                # there, and S3 needs s3:PutObjectTagging to upload or copy a file with tags.
+                # there. S3 needs s3:PutObjectTagging to upload or copy a file with tags, and the AWS CLI also reads a
+                # file's tags (s3:GetObjectTagging) when it copies a large file within S3.
                 aws_iam.PolicyStatement(
                     effect=aws_iam.Effect.ALLOW,
                     actions=[

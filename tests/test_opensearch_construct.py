@@ -304,6 +304,10 @@ def test_access_policy_allows_exactly_the_given_ranges():
     ["192.0.2.0/33"],
     # ipaddress would read the integer as 0.0.0.24
     [24],
+    # ipaddress accepts these, but they are not CIDR notation, which is all IAM reads
+    ["10.0.0.0/255.0.0.0"],
+    ["10.0.0.0/08"],
+    ["fe80::1%eth0"],
     ["192.0.2.0/24", None],
 ])
 def test_refuses_an_access_range_that_is_not_a_list_of_addresses_or_blocks(ranges):
