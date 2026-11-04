@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 # Installed
 from aws_cdk.assertions import Template
 
-# Account every test stack deploys to. A made-up one, so no test can reach AWS.
+# Account every test stack deploys to. A made-up one, so no template names a real account.
 ACCOUNT = "123456789012"
 # Hosted zone id that hosted_zone_context() hands to HostedZone.from_lookup
 HOSTED_ZONE_ID = "Z0123456789ABCDEFGHIJ"

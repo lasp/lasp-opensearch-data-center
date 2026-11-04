@@ -157,13 +157,14 @@ def test_node_types_and_counts_reach_the_domain():
 
 def test_zone_awareness_reaches_the_domain():
     """A zone awareness config spreads the data nodes across the given number of zones."""
+    # 3 zones, since CDK fills in 2 when zone awareness is enabled without a count
     template = _template(
-        opensearch_data_node_count=2,
-        opensearch_zone_awareness=opensearch.ZoneAwarenessConfig(enabled=True, availability_zone_count=2),
+        opensearch_data_node_count=3,
+        opensearch_zone_awareness=opensearch.ZoneAwarenessConfig(enabled=True, availability_zone_count=3),
     )
     cluster = _domain(template)["Properties"]["ClusterConfig"]
     assert cluster["ZoneAwarenessEnabled"] is True
-    assert cluster["ZoneAwarenessConfig"] == {"AvailabilityZoneCount": 2}
+    assert cluster["ZoneAwarenessConfig"] == {"AvailabilityZoneCount": 3}
 
 
 def test_domain_name_and_version_default_to_opensearch_2_9(default_built):
