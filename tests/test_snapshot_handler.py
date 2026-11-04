@@ -157,10 +157,33 @@ def test_prune_sends_no_delete_when_nothing_has_expired(handler_module):
 
 def test_prune_leaves_a_slow_deletion_running(handler_module):
     """The deletion is queued behind the snapshot just requested, so not finishing in time is expected."""
+    # 92 days old: past the 90-day retention, but not by more than OVERDUE_DAYS
     deleted, _, _ = _prune(
-        handler_module, {"snapshots": [_snap(100), _snap(1)]}, handler_module.requests.exceptions.ReadTimeout()
+        handler_module, {"snapshots": [_snap(92), _snap(1)]}, handler_module.requests.exceptions.ReadTimeout()
     )
-    assert deleted == [_name(100)]
+    assert deleted == [_name(92)]
+
+
+@pytest.mark.parametrize("unanswered", ["read timeout", "504"])
+def test_prune_raises_when_an_unanswered_deletion_includes_an_overdue_snapshot(handler_module, unanswered):
+    """A snapshot more than 7 days past retention should have been deleted by earlier runs, so the run fails."""
+    result = handler_module.requests.exceptions.ReadTimeout() if unanswered == "read timeout" else _response(status=504)
+    # 97.01 days old is just over 90 + 7; 92 is not overdue, and the message names only the overdue one
+    with pytest.raises(Exception, match=r"past the retention window") as raised:
+        _prune(handler_module, {"snapshots": [_snap(97.01), _snap(92), _snap(1)]}, result)
+    assert _name(97.01) in str(raised.value)
+    assert _name(92) not in str(raised.value)
+
+
+def test_prune_does_not_raise_for_an_overdue_snapshot_it_deletes(handler_module):
+    """A deletion that answers 200 has removed the snapshot, so there is nothing left to report."""
+    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(120), _snap(1)]})
+    assert deleted == [_name(120)]
+
+
+def test_a_snapshot_exactly_7_days_past_retention_is_not_overdue(handler_module):
+    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(97), _snap(1)]}, _response(status=504))
+    assert deleted == [_name(97)]
 
 
 def test_prune_raises_when_it_cannot_connect_to_delete(handler_module):
@@ -178,8 +201,8 @@ def test_prune_treats_an_already_deleted_snapshot_as_benign(handler_module):
 
 
 def test_prune_leaves_a_deletion_the_endpoint_timed_out_running(handler_module):
-    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(100), _snap(1)]}, _response(status=504))
-    assert deleted == [_name(100)]
+    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(92), _snap(1)]}, _response(status=504))
+    assert deleted == [_name(92)]
 
 
 def test_prune_raises_when_a_delete_fails(handler_module):

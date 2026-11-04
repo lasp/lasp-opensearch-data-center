@@ -43,6 +43,9 @@ LISTING_TIMEOUT_SECONDS = 120
 # the same repository, and the day's snapshot has just been requested, so the deletion normally cannot finish
 # within one invocation. The request is left running on the cluster once this wait is over.
 DELETE_WAIT_SECONDS = 60
+# A deletion that has not answered in time normally finishes on the cluster later the same day. A snapshot still
+# selected this many days after its retention ran out means earlier deletions did not finish, so the run fails.
+OVERDUE_DAYS = 7
 
 # AWS service and credentials to pass to the opensearch python library
 service = "es"
@@ -161,6 +164,20 @@ def select_snapshots_to_delete(
     return [s["snapshot"] for _, s in expired[:max_deletions]]
 
 
+def raise_if_overdue(overdue: List[str]) -> None:
+    """Fail the run when a deletion that has not answered includes snapshots earlier runs should have deleted
+
+    Called only when the deletion has not answered, so whether these snapshots are deleted is not yet known.
+    """
+    if overdue:
+        raise Exception(
+            f"Snapshots {overdue} are more than {OVERDUE_DAYS} days past the retention window and are still in the "
+            "repository, so earlier deletions have not finished. Their deletion has been requested again. Check the "
+            "cluster's pending tasks and snapshot status, or, if the repository had more expired snapshots than "
+            f"{MAX_DELETIONS_PER_RUN}, wait for the backlog to clear."
+        )
+
+
 def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
     """Delete snapshots older than the retention window through the OpenSearch snapshot API
 
@@ -175,6 +192,10 @@ def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
     endpoint answers 504, it is left running on the cluster. If a selected snapshot no longer exists (another
     deletion finished first), OpenSearch rejects the whole request. In each case the next run's listing selects
     again whatever was not deleted.
+
+    A deletion left running raises instead of returning when a selected snapshot is more than OVERDUE_DAYS past the
+    retention window, because earlier runs' deletions of it have not finished. A repository with more expired
+    snapshots than MAX_DELETIONS_PER_RUN raises this way too until it has caught up.
 
     Parameters
     ----------
@@ -198,13 +219,16 @@ def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
         raise Exception(f"Listing snapshots failed: {response.status_code}.{response.text}")
     snapshots = response.json().get("snapshots", [])
 
-    to_delete = select_snapshots_to_delete(snapshots, datetime.now(timezone.utc), retention_days)
+    now = datetime.now(timezone.utc)
+    to_delete = select_snapshots_to_delete(snapshots, now, retention_days)
     logger.info(
         f"{len(snapshots)} snapshots in repository, {len(to_delete)} selected for deletion "
         f"(retention {retention_days} days, at most {MAX_DELETIONS_PER_RUN} per run)."
     )
     if not to_delete:
         return []
+    overdue_before = now - timedelta(days=retention_days + OVERDUE_DAYS)
+    overdue = [name for name in to_delete if snapshot_start_time(name) < overdue_before]
 
     try:
         response = requests.delete(f"{repo_url}/{','.join(to_delete)}", auth=awsauth, timeout=DELETE_WAIT_SECONDS)
@@ -214,12 +238,14 @@ def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
         logger.warning(
             f"Deletion of {to_delete} did not finish within {DELETE_WAIT_SECONDS} seconds and continues on the cluster."
         )
+        raise_if_overdue(overdue)
         return to_delete
     if response.status_code == 504:
         # AWS documents this for taking snapshots, and it is applied here to deleting them: "Long-running snapshot
         # operations sometimes encounter the following error: 504 GATEWAY_TIMEOUT. You can typically ignore these
         # errors and wait for the operation to complete successfully." (Amazon OpenSearch Service, "Take a snapshot")
         logger.warning(f"Deletion of {to_delete} timed out at the endpoint (504); it typically still completes.")
+        raise_if_overdue(overdue)
         return to_delete
     if response.status_code == 404:
         logger.warning(

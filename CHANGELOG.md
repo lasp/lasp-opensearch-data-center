@@ -10,6 +10,9 @@
   Lambda's own format (`os_snapshot_YYYY-MM-DD-HH:MM:SS`) are pruned, and pruning runs after the day's snapshot
   has been requested. The listing does not read per-snapshot metadata, so repositories where the S3 expiry has
   already removed it do not block pruning.
+- A deletion that has not finished within a minute is left running on the cluster, and the next run selects again
+  whatever it did not delete. The run fails when such a deletion includes a snapshot more than 7 days past the
+  retention window, since earlier deletions of it have not finished.
 - Added unit tests for the snapshot bucket configuration and the retention logic.
 
 ## v1.0.8 (released)

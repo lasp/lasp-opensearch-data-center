@@ -14,7 +14,9 @@ the responsibility of the user implementing a CDK application (e.g. a data cente
   repository a different name. The most recent snapshot it took that the repository reports as successful is
   always kept. It requests at most 20 deletions per run, in one request that OpenSearch queues behind the snapshot
   just started and that usually completes after the Lambda has finished, so a large backlog takes several days to
-  clear.
+  clear. The run fails, after taking its snapshot, when a deletion it cannot see finish includes a snapshot more than
+  7 days past the retention window, since earlier runs' deletions of it have not finished; a backlog of more than 20
+  expired snapshots fails this way too until it has cleared.
 
 # Example Usage in Stack
 
