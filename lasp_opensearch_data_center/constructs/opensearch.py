@@ -144,10 +144,10 @@ class OpenSearchConstruct(Construct):
         """
         super().__init__(scope, construct_id)
 
-        # The handler parses the value with int() and subtracts it from the current date, so anything but a whole
-        # number of days in this range would fail every run. bool is excluded explicitly because it is a subclass of
-        # int.
-        if snapshot_retention_days is not None and (
+        # The default Lambda's handler parses the value with int() and subtracts it from the current date, so anything
+        # but a whole number of days in this range would fail every run. bool is excluded explicitly because it is a
+        # subclass of int. A Lambda passed in never receives the value, so it is not checked then.
+        if snapshot_lambda is None and snapshot_retention_days is not None and (
             isinstance(snapshot_retention_days, bool)
             or not isinstance(snapshot_retention_days, int)
             or not 1 <= snapshot_retention_days <= MAX_SNAPSHOT_RETENTION_DAYS

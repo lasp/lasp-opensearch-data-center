@@ -406,6 +406,21 @@ def test_default_snapshot_lambda_may_call_the_domain_and_pass_only_the_snapshot_
     )
 
 
+def test_retention_is_not_checked_for_a_lambda_passed_in():
+    """snapshot_retention_days has no effect on a Lambda passed in, so a value the default Lambda would refuse is
+    accepted."""
+    stack = cdk.Stack(cdk.App(), "TestStack", env=ENV)
+    given = lambda_.Function(
+        stack,
+        "GivenSnapshotLambda",
+        runtime=lambda_.Runtime.PYTHON_3_13,
+        handler="index.handler",
+        code=lambda_.Code.from_inline("def handler(event, context): pass"),
+    )
+    _build(stack=stack, snapshot_lambda=given, snapshot_retention_days=0)
+    Template.from_stack(stack)
+
+
 def test_snapshot_lambda_argument_replaces_the_default():
     """A Lambda passed in is scheduled and granted access, and the construct builds no image Lambda of its own."""
     stack = cdk.Stack(cdk.App(), "TestStack", env=ENV)
