@@ -2,14 +2,9 @@
 # Standard
 from datetime import datetime, timedelta, timezone
 import importlib
-import sys
-from pathlib import Path
 from unittest import mock
 # Installed
 import pytest
-
-# The Lambda runtime is a separate package that is not installed alongside the construct library
-sys.path.insert(0, str(Path(__file__).parent.parent / "lasp_opensearch_data_center" / "lambda"))
 
 NOW = datetime(2026, 9, 28, 9, 0, tzinfo=timezone.utc)
 REPO_URL = "https://search.example.com/_snapshot/repo"
@@ -27,6 +22,7 @@ def handler_module(monkeypatch):
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.delenv("AWS_PROFILE", raising=False)
+    # The Lambda runtime is a dev dependency in pyproject.toml, so `poetry install` installs it
     module = importlib.import_module("opensearch_data_center_lambda_runtime.snapshot_handler")
     return importlib.reload(module)
 
