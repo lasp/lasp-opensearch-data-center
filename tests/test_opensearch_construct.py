@@ -418,7 +418,9 @@ def test_retention_is_not_checked_for_a_lambda_passed_in():
         code=lambda_.Code.from_inline("def handler(event, context): pass"),
     )
     _build(stack=stack, snapshot_lambda=given, snapshot_retention_days=0)
-    Template.from_stack(stack)
+    given_function = Template.from_stack(stack).to_json()["Resources"][stack.get_logical_id(given.node.default_child)]
+    # The construct adds no environment variables, the retention among them, to a Lambda passed in
+    assert "Environment" not in given_function["Properties"]
 
 
 def test_snapshot_lambda_argument_replaces_the_default():

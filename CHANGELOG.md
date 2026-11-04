@@ -6,7 +6,7 @@
   turned bucket versioning off by default, those deletions were permanent. The rule is removed.
 - The snapshot Lambda now enforces retention through the OpenSearch snapshot API, which only deletes files no
   remaining snapshot references. Configure with the new `snapshot_retention_days` argument to `OpenSearchConstruct`
-  (default 90, `None` keeps all snapshots; must be a whole number from 1 to 36500). Only snapshots named in the
+  (default 90, `None` keeps all snapshots; with the default Lambda, a whole number from 1 to 36500). Only snapshots named in the
   Lambda's own format (`os_snapshot_YYYY-MM-DD-HH:MM:SS`) are pruned, and pruning runs after the day's snapshot
   has been requested. The listing does not read per-snapshot metadata, so repositories where the S3 expiry has
   already removed it do not block pruning.
