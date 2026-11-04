@@ -193,6 +193,30 @@ def test_dropbox_lambda_env_overrides_only_the_values_it_names():
     }
 
 
+def test_lambda_env_accepts_variable_names_as_strings():
+    """A string key names the variable directly: one matching a default replaces it, and any other is added."""
+    built = _build(
+        dropbox_lambda_env={"MAX_FILE_SIZE_MB": "100", "EXTRA_SETTING": "on"},
+        ingest_lambda_env={"CHUNK_SIZE_MB": "2"},
+    )
+    assert built.lambda_environment(built.dropbox_lambda) == {
+        "DROPBOX_BUCKET_NAME": {"Ref": built.id_of(built.dropbox_bucket)},
+        "INGEST_BUCKET_NAME": {"Ref": built.id_of(built.ingest_bucket)},
+        "CONSOLE_LOG_LEVEL": "INFO",
+        "MAX_FILE_SIZE_MB": "100",
+        "EXTRA_SETTING": "on",
+    }
+    environment = built.lambda_environment(built.ingest_lambda)
+    assert environment["CHUNK_SIZE_MB"] == "2"
+    assert len(environment) == 10
+
+
+def test_lambda_env_refuses_a_variable_named_twice():
+    """An enum member and the string it stands for are one variable, so setting both is refused, not resolved silently."""
+    with pytest.raises(ValueError, match="MAX_FILE_SIZE_MB twice"):
+        _build(dropbox_lambda_env={DropboxLambdaEnv.MAX_FILE_SIZE_MB: "40", "MAX_FILE_SIZE_MB": "50"})
+
+
 # ---- Triggers ----
 
 def test_each_lambda_reads_its_own_queue_one_message_at_a_time(default_built):
@@ -239,34 +263,16 @@ def _objects_in(built: Built, bucket: s3.Bucket) -> dict:
     return {"Fn::Join": ["", [{"Fn::GetAtt": [built.id_of(bucket), "Arn"]}, "/*"]]}
 
 
-def _only_statement_on(statements: list, resource) -> dict:
-    """Return the one statement whose Resource is exactly `resource`"""
-    found = [statement for statement in statements if statement["Resource"] == resource]
-    assert len(found) == 1, statements
-    return found[0]
-
-
-def _assert_s3_statement_scope(statement: dict) -> None:
-    """Check an S3 statement allows, with no condition, but leave its actions unchecked.
-
-    Its actions include s3:*, which looks broader than the Lambdas need; that is reported for a decision rather
-    than locked in by a test.
-    """
-    assert statement["Effect"] == "Allow"
-    assert set(statement) == {"Action", "Effect", "Resource"}
-
-
 def test_ingest_lambda_permissions(default_built):
-    """The ingest Lambda may consume its queue, call the domain, and use the ingest bucket's objects and status table."""
+    """The ingest Lambda may consume its queue, call the domain, read the ingest bucket's files and use the status
+    table, nothing more."""
     built = default_built
     table_arn = {"Fn::GetAtt": [_table_id(built), "Arn"]}
-    statements = built.lambda_role_statements(built.ingest_lambda)
-    s3_statement = _only_statement_on(statements, _objects_in(built, built.ingest_bucket))
-    _assert_s3_statement_scope(s3_statement)
     assert_same_statements(
-        [statement for statement in statements if statement is not s3_statement],
+        built.lambda_role_statements(built.ingest_lambda),
         [
             _queue_consumer_statement(built, built.ingest_queue),
+            {"Action": "s3:GetObject", "Effect": "Allow", "Resource": _objects_in(built, built.ingest_bucket)},
             {"Action": "es:*", "Effect": "Allow", "Resource": f"{DOMAIN_ARN}/*"},
             {
                 "Action": ["dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem"],
@@ -278,16 +284,24 @@ def test_ingest_lambda_permissions(default_built):
 
 
 def test_dropbox_lambda_permissions(default_built):
-    """The dropbox Lambda may consume its queue and use the objects of the dropbox and ingest buckets, nothing more."""
+    """The dropbox Lambda may consume its queue, read, write and delete the dropbox bucket's files, and write the
+    ingest bucket's, nothing more. It never reads or deletes in the ingest bucket."""
     built = default_built
-    statements = built.lambda_role_statements(built.dropbox_lambda)
-    s3_statement = _only_statement_on(
-        statements, [_objects_in(built, built.ingest_bucket), _objects_in(built, built.dropbox_bucket)]
-    )
-    _assert_s3_statement_scope(s3_statement)
     assert_same_statements(
-        [statement for statement in statements if statement is not s3_statement],
-        [_queue_consumer_statement(built, built.dropbox_queue)],
+        built.lambda_role_statements(built.dropbox_lambda),
+        [
+            _queue_consumer_statement(built, built.dropbox_queue),
+            {
+                "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+                "Effect": "Allow",
+                "Resource": _objects_in(built, built.dropbox_bucket),
+            },
+            {
+                "Action": ["s3:PutObject", "s3:AbortMultipartUpload"],
+                "Effect": "Allow",
+                "Resource": _objects_in(built, built.ingest_bucket),
+            },
+        ],
     )
 
 

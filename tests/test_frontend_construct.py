@@ -142,27 +142,19 @@ def test_deploy_user_has_no_permissions_of_its_own(built):
 
 
 def test_deploy_policy_reaches_only_the_site_bucket_and_its_frontend_prefix(built):
-    """The deploy role may list bucket names, and otherwise acts only on the site bucket and its frontend/ objects."""
+    """The deploy role may list the site bucket and upload files under frontend/, nothing more."""
     role_id = only_resource_id(built.template, "AWS::IAM::Role", {"RoleName": "frontend-deploy-role"})
-    statements = role_policy_statements(built.template, role_id)
-    assert len(statements) == 2
-    assert {
-        "Action": ["s3:GetBucketLocation", "s3:ListAllMyBuckets"],
-        "Effect": "Allow",
-        "Resource": "arn:aws:s3:::*",
-    } in statements
-    site_statements = [statement for statement in statements if statement["Resource"] != "arn:aws:s3:::*"]
-    assert len(site_statements) == 1
-    # Its actions are left unchecked: s3:* on the bucket itself looks broader than a deploy needs, and is
-    # reported for a decision rather than locked in by a test
-    assert site_statements[0]["Effect"] == "Allow"
-    assert set(site_statements[0]) == {"Action", "Effect", "Resource"}
-    assert site_statements[0]["Resource"] == [
-        built.bucket_arn(),
-        {"Fn::Join": ["", [built.bucket_arn(), "/frontend/*"]]},
-    ]
-    # The deploy role gets no inline policy beside the managed one
-    built.template.resource_properties_count_is("AWS::IAM::Policy", {"Roles": [{"Ref": role_id}]}, 0)
+    assert_same_statements(
+        role_policy_statements(built.template, role_id),
+        [
+            {"Action": "s3:ListBucket", "Effect": "Allow", "Resource": built.bucket_arn()},
+            {
+                "Action": ["s3:PutObject", "s3:AbortMultipartUpload"],
+                "Effect": "Allow",
+                "Resource": {"Fn::Join": ["", [built.bucket_arn(), "/frontend/*"]]},
+            },
+        ],
+    )
 
 
 # ---- Certificate, WAF and CloudFront ----
@@ -275,6 +267,11 @@ def test_distribution_answers_403_with_the_app_page(built):
     assert _distribution_config(built.template)["CustomErrorResponses"] == [
         {"ErrorCachingMinTTL": 10, "ErrorCode": 403, "ResponseCode": 200, "ResponsePagePath": "/index.html"}
     ]
+
+
+def test_distribution_serves_index_html_at_the_root(built):
+    """A request for the site's root returns index.html; AWS says the name must not start with "/"."""
+    assert _distribution_config(built.template)["DefaultRootObject"] == "index.html"
 
 
 def test_bucket_policy_lets_only_cloudfront_read_objects(built):

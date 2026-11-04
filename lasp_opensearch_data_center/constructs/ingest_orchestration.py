@@ -11,6 +11,7 @@ When data lands in the Ingest Bucket, a second Lambda function called the Ingest
 into the OpenSearch instance.
 """
 # Standard
+from enum import Enum
 from typing import Optional
 # Installed
 from constructs import Construct
@@ -37,6 +38,21 @@ from lasp_opensearch_data_center.constructs.constants import (
     DropboxLambdaEnv,
     IngestLambdaEnv
 )
+
+
+def _by_variable_name(environment: dict) -> dict:
+    """Key the environment by variable name, so an Enum member and the string it stands for are the same variable
+
+    Keys may be members of DropboxLambdaEnv or IngestLambdaEnv, whose values are the variable names, or plain strings.
+    Raises ValueError if two keys name the same variable, since only one value could be kept.
+    """
+    by_name = {}
+    for key, value in environment.items():
+        name = key.value if isinstance(key, Enum) else key
+        if name in by_name:
+            raise ValueError(f"The environment sets {name} twice, once as {key!r}")
+        by_name[name] = value
+    return by_name
 
 
 class IngestProcessingConstruct(Construct):
@@ -68,8 +84,6 @@ class IngestProcessingConstruct(Construct):
             ID for this construct instance, e.g. "MyOpenSearchConstruct".
         open_search_domain : opensearch.Domain
             The domain where opensearch lives. Used to provide environment variables to the Lambda functions.
-        backup_vault : Optional[backup.BackupVault]
-            Default None (no backups). Provide a backup vault to back up the ingest status table.
         dropbox_bucket : s3.Bucket
             Dropbox Bucket for incoming data. Used to provide environment variables to the Lambda functions.
         ingest_bucket : s3.Bucket
@@ -84,12 +98,14 @@ class IngestProcessingConstruct(Construct):
             Lambda function for ingest data into opensearch.
         dropbox_lambda_env : Optional[dict]
             Environment variables for the Dropbox Lambda function. These variables overwrite the defaults assigned
-            to the function internally to this construct. See constants.DropboxLambdaEnv.
+            to the function internally to this construct. Each key is a constants.DropboxLambdaEnv member, or a
+            string naming a variable of your own.
         ingest_lambda_env : Optional[dict]
             Environment variables for the Ingest Lambda function. These variables overwrite the defaults assigned
-            to the function internally to this construct. See constants.IngestLambdaEnv.
+            to the function internally to this construct. Each key is a constants.IngestLambdaEnv member, or a
+            string naming a variable of your own.
         backup_vault : Optional[backup.BackupVault]
-            Backup vault to use for backing up the ingest status table.
+            Default None (no backups). Provide a backup vault to back up the ingest status table.
         """
         super().__init__(scope, construct_id)
 
@@ -147,22 +163,29 @@ class IngestProcessingConstruct(Construct):
             DropboxLambdaEnv.CONSOLE_LOG_LEVEL: "INFO",
             DropboxLambdaEnv.MAX_FILE_SIZE_MB: "30",
         }
-        if dropbox_lambda_env:
-            # Update the default environment variables with the user specified environment variables
-            dropbox_lambda_environment = {**dropbox_lambda_environment, **dropbox_lambda_env}
+        # The user specified environment variables replace the defaults of the same name
+        dropbox_lambda_environment = {
+            **_by_variable_name(dropbox_lambda_environment), **_by_variable_name(dropbox_lambda_env or {})
+        }
+        for name, value in dropbox_lambda_environment.items():
+            dropbox_lambda.add_environment(name, value)
 
-        for env_var, value in dropbox_lambda_environment.items():
-            dropbox_lambda.add_environment(env_var.value, value)
-
-        # S3
+        # The Dropbox Lambda reads each new file and copies it either to the Ingest Bucket or, when it is invalid, to
+        # another prefix of the Dropbox Bucket, then deletes the original. A copy needs s3:GetObject on the source and
+        # s3:PutObject on the destination, and boto3 copies a file of 8 MiB or more in parts, which
+        # s3:AbortMultipartUpload lets it cancel if the copy fails.
         dropbox_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
-                actions=["s3:*", "s3:ListObjects", "s3:GetObject"],
-                resources=[
-                    f"{ingest_bucket.bucket_arn}/*",
-                    f"{dropbox_bucket.bucket_arn}/*",
-                ],
+                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+                resources=[f"{dropbox_bucket.bucket_arn}/*"],
+            )
+        )
+        dropbox_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["s3:PutObject", "s3:AbortMultipartUpload"],
+                resources=[f"{ingest_bucket.bucket_arn}/*"],
             )
         )
 
@@ -253,12 +276,12 @@ class IngestProcessingConstruct(Construct):
             IngestLambdaEnv.MAX_FILE_SIZE_MB: "30",
             IngestLambdaEnv.OPENSEARCH_CLIENT_REQUEST_TIMEOUT: "60",
         }
-        if ingest_lambda_env:
-            # Update the default environment variables with the user specified environment variables
-            ingest_lambda_environment = {**ingest_lambda_environment, **ingest_lambda_env}
-
-        for env_var, value in ingest_lambda_environment.items():
-            ingest_lambda.add_environment(env_var.value, value)
+        # The user specified environment variables replace the defaults of the same name
+        ingest_lambda_environment = {
+            **_by_variable_name(ingest_lambda_environment), **_by_variable_name(ingest_lambda_env or {})
+        }
+        for name, value in ingest_lambda_environment.items():
+            ingest_lambda.add_environment(name, value)
 
         # Add SQS trigger for ingest Lambda
         ingest_lambda.add_event_source(
@@ -277,11 +300,11 @@ class IngestProcessingConstruct(Construct):
                 resources=[f"{open_search_domain.domain_arn}/*"],
             )
         )
-        # Add permissions for Ingest Lambda to access the Ingest Bucket
+        # The Ingest Lambda only reads the files it ingests from the Ingest Bucket
         ingest_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
-                actions=["s3:*", "s3:ListObjects", "s3:GetObject"],
+                actions=["s3:GetObject"],
                 resources=[f"{ingest_bucket.bucket_arn}/*"],
             )
         )

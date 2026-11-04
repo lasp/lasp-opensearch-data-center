@@ -1,7 +1,9 @@
 """Open Search Stack"""
 
 # Standard
+import ipaddress
 from pathlib import Path
+import re
 from typing import Optional
 import warnings
 
@@ -88,14 +90,14 @@ class OpenSearchConstruct(Construct):
             to define it outside of this Construct. Can be sourced from a lasp_opensearch_data_center CertificateStack.
         opensearch_snapshot_bucket : s3.Bucket
             S3 bucket in which to store periodic snapshots of OpenSearch indexes. Snapshots are taken using a daily
-            scheduled Lambda that makes an API call to take the snapshot. See `docker_context_path` if you want
-            to customize this Lambda function. This is required so that you can manage your persistent storage
+            scheduled Lambda that makes an API call to take the snapshot. See `snapshot_lambda` if you want
+            to supply your own Lambda function. This is required so that you can manage your persistent storage
             independent of your OS cluster deployment.
         opensearch_domain_name : str
             Name of the OpenSearch domain, e.g. (`opensearch-testing`). Required to name the OpenSearch Domain
             but does not affect access URLs.
-        opensearch_version : str, optional
-            Version of OpenSearch to deploy, e.g. "2.5". Default is "2.9".
+        opensearch_version : opensearch.EngineVersion, optional
+            Version of OpenSearch to deploy, e.g. `opensearch.EngineVersion.open_search("2.19")`. Default is 2.9.
         opensearch_zone_awareness : opensearch.ZoneAwarenessConfig, optional
             AWS can optionally distribute OpenSearch nodes across multiple AZs to increase availability.
             Default is None (no zone awareness).
@@ -118,9 +120,9 @@ class OpenSearchConstruct(Construct):
             Number of OpenSearch manager nodes to deploy. Using 3 manager nodes is recommended for production environments
             to ensure high availability and cluster stability.
         opensearch_ip_access_range : list[str], optional
-            List of IP CIDR blocks on which to allow OpenSearch domain access (e.g. for security purposes).
-            Default is ["127.0.0.1/32"]. 
-            Note: leaving this unchanged will raise a warning no one can access your opensearch cluster.
+            List of IP addresses or CIDR blocks from which the OpenSearch domain may be called, such as
+            ["192.0.2.0/24", "198.51.100.7"]. Anything else, including None, an empty list or a single string, raises
+            `ValueError`. Default is ["127.0.0.1/32"], which no client can use, so leaving it unchanged warns.
         opensearch_volume_size : int, optional
             The size, in GB, of the OpenSearch domain's underlying EBS storage. Default is 50GB.
         tls_security_policy : opensearch.TLSSecurityPolicy, optional
@@ -159,11 +161,35 @@ class OpenSearchConstruct(Construct):
                 f"or None, got {snapshot_retention_days!r}"
             )
 
-        # User warnings
-        if "127.0.0.1/32" in opensearch_ip_access_range and len(opensearch_ip_access_range) == 0:
+        # The domain's access policy lets anyone, signed in or not, call it from these ranges, so accept only a
+        # non-empty list of addresses or CIDR blocks. An empty list would leave the policy's aws:SourceIp empty.
+        if not isinstance(opensearch_ip_access_range, list) or not opensearch_ip_access_range:
+            raise ValueError(
+                "opensearch_ip_access_range must be a non-empty list of IP addresses or CIDR blocks, such as "
+                f'["192.0.2.0/24"], but is {opensearch_ip_access_range!r}'
+            )
+        for ip_range in opensearch_ip_access_range:
+            # ip_network would read an integer as an address (24 as 0.0.0.24), so only strings are accepted
+            if not isinstance(ip_range, str):
+                raise ValueError(f"opensearch_ip_access_range holds {ip_range!r}, which is not a string")
+            # IAM reads only CIDR notation, an address with an optional prefix length, while ip_network would also
+            # accept a netmask ("/255.0.0.0"), a zero-padded length ("/08") or an IPv6 zone ("%eth0")
+            prefix_length = ip_range.partition("/")[2]
+            if "%" in ip_range or (prefix_length and not re.fullmatch(r"0|[1-9][0-9]*", prefix_length)):
+                raise ValueError(f"opensearch_ip_access_range holds {ip_range!r}, which is not in CIDR notation")
+            try:
+                # Refuses a block with bits set after its prefix ("10.1.1.1/16"), which usually means a typo
+                ipaddress.ip_network(ip_range)
+            except ValueError as error:
+                raise ValueError(
+                    f"opensearch_ip_access_range holds {ip_range!r}, which is not an IP address or CIDR block: {error}"
+                ) from error
+
+        # The default range is only the loopback address, which no client of the domain can come from
+        if opensearch_ip_access_range == ["127.0.0.1/32"]:
             warnings.warn(
                 "You didn't specify an IP range, now no one can access your opensearch! If "
-                "this is what you intended (we think this is unlikely), you can suppress this warning."
+                "this is what you intended (we think this is unlikely), you can suppress this warning. "
                 "To fix this, change `opensearch_ip_access_range` to a more specific CIDR block spec."
             )
 

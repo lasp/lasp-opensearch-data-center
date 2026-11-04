@@ -23,6 +23,22 @@
 - Added unit tests for the snapshot bucket configuration and the retention logic.
 - Added unit tests for every construct, and a `Unit tests` workflow that runs them, and builds the snapshot Lambda's
   image, on every pull request.
+- `IngestProcessingConstruct` grants its Lambdas only the S3 actions moving and reading files needs, instead of
+  `s3:*` on both buckets' objects (and `s3:ListObjects`, which is not an IAM action). The Dropbox Lambda may read,
+  write and delete the Dropbox Bucket's files and write the Ingest Bucket's; the Ingest Lambda may only read the
+  Ingest Bucket's. A Lambda that needs more must be granted it by the caller.
+- `FrontendConstruct`'s deploy role may only list the site bucket and upload files under `frontend/` (and cancel an
+  upload); a deploy that deletes, reads, copies or tags files must be granted more. It had `s3:*` on the bucket
+  itself, including deleting it and changing its policy, and could list every bucket's name and location.
+- `dropbox_lambda_env` and `ingest_lambda_env` accept variable names as strings, beside the enum members. A string
+  key used to fail synth. Naming one variable twice in the same dictionary raises `ValueError`.
+- The CloudFront distribution's default root object is `index.html`. It was `/index.html`, and AWS says the name
+  must not begin with a slash, which can lead to a 403.
+- `OpenSearchConstruct` now warns when `opensearch_ip_access_range` is left at its default, as its docstring said.
+- `OpenSearchConstruct` raises `ValueError` unless `opensearch_ip_access_range` is a non-empty list of IP addresses
+  or CIDR blocks, in CIDR notation. Before, an empty list left the access policy's `aws:SourceIp` empty, None
+  failed synth with a `TypeError`, and a single string, which the usage docs showed, was accepted.
+- Corrected docstrings: `account_type` on `FrontendConstruct` is unused, `opensearch_version` is an `EngineVersion`.
 
 ## v1.0.8 (released)
 - Updated the max file size check for incoming files to the Dropbox Lambda and set limit to 30MB.
