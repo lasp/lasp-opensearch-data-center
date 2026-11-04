@@ -152,20 +152,13 @@ class FrontendConstruct(Construct):
                     actions=["s3:ListBucket"],
                     resources=[frontend_bucket.bucket_arn],
                 ),
-                # All the site's files are under frontend/. A deploy uploads them (in parts for large files, which it
-                # may cancel) and deletes those the new build no longer has. It may also read or copy those already
-                # there. S3 needs s3:PutObjectTagging to upload or copy a file with tags, and the AWS CLI also reads a
-                # file's tags (s3:GetObjectTagging) when it copies a large file within S3.
+                # All the site's files are under frontend/. This allows only uploading them; a deploy that deletes,
+                # reads, copies or tags files needs more. The AWS CLI uploads a file of 8 MB or more in parts, which
+                # s3:PutObject covers, and can cancel a failed one (s3:AbortMultipartUpload) instead of leaving its
+                # parts in the bucket.
                 aws_iam.PolicyStatement(
                     effect=aws_iam.Effect.ALLOW,
-                    actions=[
-                        "s3:GetObject",
-                        "s3:GetObjectTagging",
-                        "s3:PutObject",
-                        "s3:PutObjectTagging",
-                        "s3:DeleteObject",
-                        "s3:AbortMultipartUpload",
-                    ],
+                    actions=["s3:PutObject", "s3:AbortMultipartUpload"],
                     resources=[frontend_bucket.bucket_arn + "/frontend/*"],
                 ),
             ],

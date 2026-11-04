@@ -7,9 +7,9 @@
   `s3:*` on both buckets' objects (and `s3:ListObjects`, which is not an IAM action). The Dropbox Lambda may read,
   write and delete the Dropbox Bucket's files and write the Ingest Bucket's; the Ingest Lambda may only read the
   Ingest Bucket's. A Lambda that needs more must be granted it by the caller.
-- `FrontendConstruct`'s deploy role may list the site bucket and read, upload, tag, replace and delete files under
-  `frontend/`. It had `s3:*` on the bucket itself, including deleting it and changing its policy, and could list every
-  bucket's name and location.
+- `FrontendConstruct`'s deploy role may only list the site bucket and upload files under `frontend/` (and cancel an
+  upload); a deploy that deletes, reads, copies or tags files must be granted more. It had `s3:*` on the bucket
+  itself, including deleting it and changing its policy, and could list every bucket's name and location.
 - `dropbox_lambda_env` and `ingest_lambda_env` accept variable names as strings, beside the enum members. A string
   key used to fail synth. Naming one variable twice in the same dictionary raises `ValueError`.
 - The CloudFront distribution's default root object is `index.html`. It was `/index.html`, and AWS says the name
