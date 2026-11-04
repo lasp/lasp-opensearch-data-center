@@ -1,6 +1,8 @@
 # Version Changes
 ## v1.0.9 (released)
 - Added a `tls_security_policy` parameter to `OpenSearchConstruct`, defaulting to `TLS_1_2_PFS` (AWS's most secure TLS policy).
+- Added unit tests for every construct, and a `Unit tests` workflow that runs them, and builds the snapshot Lambda's
+  image, on every pull request.
 
 ## v1.0.8 (released)
 - Updated the max file size check for incoming files to the Dropbox Lambda and set limit to 30MB.
