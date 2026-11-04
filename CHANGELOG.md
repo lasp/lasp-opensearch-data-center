@@ -11,9 +11,9 @@
 - The snapshot Lambda now enforces retention through the OpenSearch snapshot API, which only deletes files no
   remaining snapshot references. Configure with the new `snapshot_retention_days` argument to `OpenSearchConstruct`
   (default 90, `None` keeps all snapshots; with the default Lambda, a whole number from 1 to 36500). Only snapshots named in the
-  Lambda's own format (`os_snapshot_YYYY-MM-DD-HH:MM:SS`) are pruned, and pruning runs after the day's snapshot
-  has been requested. The listing does not read per-snapshot metadata, so repositories where the S3 expiry has
-  already removed it do not block pruning.
+  Lambda's own format (`os_snapshot_YYYY-MM-DD-HH:MM:SS`) are pruned, the newest successful one is always kept,
+  and pruning runs after the day's snapshot has been requested. The listing does not read per-snapshot metadata,
+  so repositories where the S3 expiry has already removed it do not block pruning.
 - A deletion that has not finished within a minute is left running on the cluster, and the next run selects again
   whatever it did not delete. The run fails, after taking its snapshot, when a deletion that was not confirmed
   includes a snapshot more than 7 days past the retention window. That shows deletions that never finish, and it also

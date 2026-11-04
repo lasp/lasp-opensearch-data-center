@@ -59,8 +59,12 @@ git push origin X.Y.Z
 ```
 
 #### Prereleases
-Unless the pushed tag matches the regex `^[0-9]*\.[0-9]*\.[0-9]*`, the release will be marked as a
-prerelease in GitHub. This allows "official" prereleases of suffixed tags, e.g. `1.2.3rc4`
+Unless the pushed tag matches the regex `^[0-9]+\.[0-9]+\.[0-9]+$` (`X.Y.Z` with no suffix), the release will be
+marked as a prerelease in GitHub. This allows "official" prereleases of suffixed tags, e.g. `1.2.3rc4`
+
+#### Tag and version
+The workflow stops before publishing anything unless the tag, without any `test-release/` prefix, equals the version
+in `pyproject.toml`. Tag the commit that sets that version.
 
 #### Release Notes Generation
 Release notes are generated based on commit messages since the latest non-prerelease Release.

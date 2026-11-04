@@ -32,6 +32,18 @@ jobs:
       - name: Install project dependencies
         run: python -m pip install build twine
 
+      - name: Check the tag matches the package version
+        # PyPI never accepts the same version twice, so a tag on the wrong commit would publish the wrong version
+        # for good
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["tool"]["poetry"]["version"])')
+          if [ "${TAG#test-release/}" != "$version" ]; then
+            echo "::error::Tag $TAG does not match version $version in pyproject.toml"
+            exit 1
+          fi
+
       - name: Build wheel and source distribution
         run: |
           python -m build
@@ -133,14 +145,16 @@ jobs:
             ./dist/*.whl
 
       - name: Determine if the release is a prerelease
-        # Checks the regex form of the tag.
-        # Marks final releases only for tags matching the regex (no version suffixes)
-        # All other releases are marked as prereleases
+        # A tag of the form X.Y.Z is a final release; any other, such as 1.2.3rc1, is a prerelease. The pattern is
+        # unquoted because bash matches a quoted pattern as literal text, and the final release's option is empty
+        # rather than '' so that gh is not handed an empty argument.
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          if [[ ${{ github.ref_name }} =~ '^.*[0-9]*\.[0-9]*\.[0-9]*$' ]]; then
-          echo "PRE_RELEASE_OPTION=''" >> $GITHUB_ENV  # Not a prerelease
+          if [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "PRE_RELEASE_OPTION=" >> "$GITHUB_ENV"  # Not a prerelease
           else
-          echo "PRE_RELEASE_OPTION=--prerelease" >> $GITHUB_ENV  # Is a prerelease
+            echo "PRE_RELEASE_OPTION=--prerelease" >> "$GITHUB_ENV"  # Is a prerelease
           fi
 
       - name: Get latest non-prerelease release
