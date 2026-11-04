@@ -5,6 +5,7 @@ Snapshot retention is not tested here: #56 adds it, with its own tests.
 # Standard
 import json
 from pathlib import Path
+import warnings
 from typing import Optional, Tuple, Union
 # Installed
 import aws_cdk as cdk
@@ -287,6 +288,19 @@ def test_access_policy_allows_exactly_the_given_ranges():
     statements = _access_policy_statements(template)
     assert len(statements) == 1
     assert statements[0]["Condition"] == {"IpAddress": {"aws:SourceIp": ranges}}
+
+
+@pytest.mark.parametrize("ranges, warns", [
+    (["127.0.0.1/32"], True),
+    (["192.0.2.0/24"], False),
+    (["127.0.0.1/32", "192.0.2.0/24"], False),
+])
+def test_warns_only_when_the_access_range_is_left_at_the_default(ranges, warns):
+    """The default range is the loopback address alone, which no client can come from, so leaving it warns."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _build(opensearch_ip_access_range=ranges)
+    assert any("no one can access your opensearch" in str(w.message) for w in caught) == warns
 
 
 # ---- Snapshot role ----

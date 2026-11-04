@@ -50,8 +50,7 @@ class FrontendConstruct(Construct):
         :param environment: Environment
             AWS environment (account and region)
         :param account_type: str
-            Naming convention used to name the IAM group and policy that allows deploying code to the S3 bucket
-            for serving the static website.
+            Not used. Kept so that existing calls still work.
         :param domain_name: str
             Domain name on which to host the website (HostedZone is created from this domain name)
         :param frontend_bucket: s3.Bucket
@@ -145,26 +144,19 @@ class FrontendConstruct(Construct):
             description="CI CD automated frontend policy",
             managed_policy_name=frontend_policy_name,
             roles=[self.frontend_deployment_role],
+            # A deploy replaces the site's files under frontend/: it lists what is there, uploads (in parts for a file
+            # of 8 MiB or more, which it may cancel), deletes what the new build no longer has, and may read or copy
+            # files already there, which needs s3:GetObject on the source
             statements=[
                 aws_iam.PolicyStatement(
-                    # Permission to list all S3 buckets
                     effect=aws_iam.Effect.ALLOW,
-                    actions=["s3:GetBucketLocation", "s3:ListAllMyBuckets"],
-                    resources=[
-                        "arn:aws:s3:::*",
-                    ],
+                    actions=["s3:ListBucket"],
+                    resources=[frontend_bucket.bucket_arn],
                 ),
                 aws_iam.PolicyStatement(
                     effect=aws_iam.Effect.ALLOW,
-                    actions=[
-                        "s3:*",
-                    ],
-                    resources=[
-                        # All bucket objects must start with the keyword "frontend"
-                        # Additional restrictions imposed at the resource/bucket level
-                        frontend_bucket.bucket_arn,
-                        frontend_bucket.bucket_arn + "/frontend/*",
-                    ],
+                    actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+                    resources=[frontend_bucket.bucket_arn + "/frontend/*"],
                 ),
             ],
         )
@@ -268,7 +260,9 @@ class FrontendConstruct(Construct):
             # Lowest price limits to US/CANADA/EU
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,
             certificate=self.cloudfront_cert,
-            default_root_object="/index.html",
+            # AWS says the default root object "can't begin with a forward slash", which "can lead to a 403 Access
+            # Denied error"
+            default_root_object="index.html",
             comment="CF dist to serve Web Team S3 frontend content",
             error_responses=[
                 # Web Team frontend apps uses SPA, so redirects are required
