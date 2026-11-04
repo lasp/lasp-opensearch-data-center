@@ -1,6 +1,7 @@
 """Tests for the OpenSearch domain, snapshot role and snapshot Lambda that OpenSearchConstruct creates
 
-Snapshot retention is not tested here: #56 adds it, with its own tests.
+The bounds of snapshot_retention_days, and the handler's pruning, are tested in test_snapshot_retention_cdk.py and
+test_snapshot_handler.py.
 """
 # Standard
 import json
@@ -379,7 +380,8 @@ def test_snapshot_role_may_only_list_read_write_and_delete_in_the_snapshot_bucke
 # ---- Snapshot Lambda ----
 
 def test_default_snapshot_lambda_environment(default_built):
-    """The snapshot Lambda is told the domain's https URL, the bucket, the role to pass and the repository name."""
+    """The snapshot Lambda is told the domain's https URL, the bucket, the role to pass, the repository name and how
+    many days to keep snapshots."""
     _, _, template = default_built
     domain_id = only_resource_id(template, "AWS::OpenSearchService::Domain")
     _, function = _default_snapshot_lambda(template)
@@ -388,6 +390,7 @@ def test_default_snapshot_lambda_environment(default_built):
         "SNAPSHOT_S3_BUCKET": {"Ref": only_resource_id(template, "AWS::S3::Bucket", {"BucketName": "test-snapshot"})},
         "SNAPSHOT_ROLE_ARN": {"Fn::GetAtt": [_snapshot_role_id(template), "Arn"]},
         "SNAPSHOT_REPO_NAME": "opensearch-snapshot-repo",
+        "SNAPSHOT_RETENTION_DAYS": "90",
     }
 
 
@@ -447,6 +450,23 @@ def test_default_snapshot_lambda_may_call_the_domain_and_pass_only_the_snapshot_
             },
         ],
     )
+
+
+def test_retention_is_not_checked_for_a_lambda_passed_in():
+    """snapshot_retention_days has no effect on a Lambda passed in, so a value the default Lambda would refuse is
+    accepted."""
+    stack = cdk.Stack(cdk.App(), "TestStack", env=ENV)
+    given = lambda_.Function(
+        stack,
+        "GivenSnapshotLambda",
+        runtime=lambda_.Runtime.PYTHON_3_13,
+        handler="index.handler",
+        code=lambda_.Code.from_inline("def handler(event, context): pass"),
+    )
+    _build(stack=stack, snapshot_lambda=given, snapshot_retention_days=0)
+    given_function = Template.from_stack(stack).to_json()["Resources"][stack.get_logical_id(given.node.default_child)]
+    # The construct adds no environment variables, the retention among them, to a Lambda passed in
+    assert "Environment" not in given_function["Properties"]
 
 
 def test_snapshot_lambda_argument_replaces_the_default():

@@ -1,6 +1,22 @@
 # Version Changes
-## v1.0.9 (released)
+## v1.0.9 (unreleased)
 - Added a `tls_security_policy` parameter to `OpenSearchConstruct`, defaulting to `TLS_1_2_PFS` (AWS's most secure TLS policy).
+- Fixed OpenSearch snapshots being corrupted by the snapshot bucket's 90-day S3 expiration rule. Snapshots are
+  incremental, so expiring objects by age deleted files that current snapshots still depended on. Since v1.0.8
+  turned bucket versioning off by default, those deletions were permanent. The rule is removed.
+- The snapshot Lambda now enforces retention through the OpenSearch snapshot API, which only deletes files no
+  remaining snapshot references. Configure with the new `snapshot_retention_days` argument to `OpenSearchConstruct`
+  (default 90, `None` keeps all snapshots; with the default Lambda, a whole number from 1 to 36500). Only snapshots named in the
+  Lambda's own format (`os_snapshot_YYYY-MM-DD-HH:MM:SS`) are pruned, and pruning runs after the day's snapshot
+  has been requested. The listing does not read per-snapshot metadata, so repositories where the S3 expiry has
+  already removed it do not block pruning.
+- A deletion that has not finished within a minute is left running on the cluster, and the next run selects again
+  whatever it did not delete. The run fails, after taking its snapshot, when a deletion that was not confirmed
+  includes a snapshot more than 7 days past the retention window. That shows deletions that never finish, and it also
+  happens for a few days when pruning starts on older snapshots: on upgrading a repository that has some, after
+  lowering `snapshot_retention_days`, or while more than 20 expired snapshots remain. Alarm on the snapshot Lambda's
+  `Errors` metric to hear of it.
+- Added unit tests for the snapshot bucket configuration and the retention logic.
 - Added unit tests for every construct, and a `Unit tests` workflow that runs them, and builds the snapshot Lambda's
   image, on every pull request.
 - `IngestProcessingConstruct` grants its Lambdas only the S3 actions moving and reading files needs, instead of

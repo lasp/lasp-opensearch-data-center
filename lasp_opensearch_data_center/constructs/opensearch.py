@@ -31,6 +31,9 @@ from lasp_opensearch_data_center.constructs.constants import (
     OPENSEARCH_SNAPSHOT_REPO_NAME,
 )
 
+# A century. Far larger values overflow the date arithmetic in the snapshot Lambda.
+MAX_SNAPSHOT_RETENTION_DAYS = 36500
+
 
 class OpenSearchConstruct(Construct):
     """OpenSearch Construct to create the Open Search Domain and cluster nodes
@@ -66,6 +69,7 @@ class OpenSearchConstruct(Construct):
         snapshot_schedule: events.Schedule = events.Schedule.cron(
             minute="0", hour="9", month="*", week_day="*", year="*"
         ),
+        snapshot_retention_days: Optional[int] = 90,
     ) -> None:
         """
         Construct init.
@@ -133,8 +137,29 @@ class OpenSearchConstruct(Construct):
         snapshot_schedule : events.Schedule
             Cron schedule on which to run the snapshot Lambda. Default is 9am UTC daily.
             See https://docs.aws.amazon.com/lambda/latest/dg/tutorial-scheduled-events-schedule-expressions.html.
+        snapshot_retention_days : Optional[int], optional
+            Snapshots taken by the default snapshot Lambda are deleted, through the OpenSearch snapshot API, once they
+            are older than this many days. With the default Lambda, must be a whole number from 1 to 36500. The
+            Lambda recognises its snapshots by name (`os_snapshot_YYYY-MM-DD-HH:MM:SS`), so give snapshots taken by
+            other means a different name. The most recent successful snapshot the Lambda took is always kept. None
+            keeps every snapshot. Default is 90.
+            Has no effect when `snapshot_lambda` is supplied.
         """
         super().__init__(scope, construct_id)
+
+        # The default Lambda's handler parses the value with int() and refuses one below 1, so anything but a whole
+        # number of at least 1 would fail every run; 36500 days (100 years) is a sanity cap. bool is excluded
+        # explicitly because it is a subclass of int. A Lambda passed in never receives the value, so it is not
+        # checked then.
+        if snapshot_lambda is None and snapshot_retention_days is not None and (
+            isinstance(snapshot_retention_days, bool)
+            or not isinstance(snapshot_retention_days, int)
+            or not 1 <= snapshot_retention_days <= MAX_SNAPSHOT_RETENTION_DAYS
+        ):
+            raise ValueError(
+                f"snapshot_retention_days must be a whole number of days from 1 to {MAX_SNAPSHOT_RETENTION_DAYS}, "
+                f"or None, got {snapshot_retention_days!r}"
+            )
 
         # The domain's access policy lets anyone, signed in or not, call it from these ranges, so accept only a
         # non-empty list of addresses or CIDR blocks. A None range would put an empty condition in the policy.
@@ -314,6 +339,8 @@ class OpenSearchConstruct(Construct):
                     "SNAPSHOT_S3_BUCKET": self.opensearch_snapshot_bucket.bucket_name,
                     "SNAPSHOT_ROLE_ARN": self.opensearch_snapshot_role.role_arn,
                     "SNAPSHOT_REPO_NAME": snapshot_repo_name,
+                    # Empty disables pruning in the handler
+                    "SNAPSHOT_RETENTION_DAYS": "" if snapshot_retention_days is None else str(snapshot_retention_days),
                 },
                 timeout=Duration.seconds(60 * 15),
                 memory_size=512,

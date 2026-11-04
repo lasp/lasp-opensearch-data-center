@@ -1,6 +1,6 @@
 """Tests for the buckets, queues and upload role that BackendStorageConstruct creates
 
-The snapshot bucket's lifecycle rule is not tested here: #56 removes it and adds its own tests.
+The snapshot bucket's lack of a lifecycle rule is tested in test_snapshot_retention_cdk.py.
 """
 # Standard
 from typing import Tuple
