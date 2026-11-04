@@ -54,6 +54,17 @@ def test_keeps_newest_success_even_when_expired(handler_module):
     assert handler_module.select_snapshots_to_delete(snapshots, NOW, 90) == [_name(300), _name(150)]
 
 
+def test_keeps_the_newest_success_wherever_the_listing_puts_it(handler_module):
+    """The newest success is chosen by start time, not by its place in the listing."""
+    snapshots = [_snap(200), _snap(300), _snap(250, state="FAILED")]
+    assert handler_module.select_snapshots_to_delete(snapshots, NOW, 90) == [_name(300), _name(250)]
+
+
+def test_deletes_expired_partial_snapshots(handler_module):
+    snapshots = [_snap(150, state="PARTIAL"), _snap(1)]
+    assert handler_module.select_snapshots_to_delete(snapshots, NOW, 90) == [_name(150)]
+
+
 @pytest.mark.parametrize("name", [
     "manual-before-upgrade",
     "os_snapshot_manual",
