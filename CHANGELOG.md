@@ -1,5 +1,5 @@
 # Version Changes
-## v1.0.9 (unreleased)
+## v1.1.0 (released)
 - Added a `tls_security_policy` parameter to `OpenSearchConstruct`, defaulting to `TLS_1_2_PFS` (AWS's most secure TLS policy).
 - Requires Python 3.13 or later (was 3.9), and `aws-cdk-lib` 2.178.0 or later: `IngestProcessingConstruct` uses
   `dynamodb.PointInTimeRecoverySpecification`, first in 2.178.0, and `OpenSearchConstruct` uses
