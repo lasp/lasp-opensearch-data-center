@@ -57,6 +57,7 @@ class OpenSearchConstruct(Construct):
         opensearch_manager_node_count: int = 1,
         opensearch_ip_access_range: list[str] = ["127.0.0.1/32"],
         opensearch_volume_size: int = 50,
+        tls_security_policy: opensearch.TLSSecurityPolicy = opensearch.TLSSecurityPolicy.TLS_1_2_PFS,
         snapshot_repo_name: str = OPENSEARCH_SNAPSHOT_REPO_NAME,
         removal_policy: RemovalPolicy = RemovalPolicy.RETAIN,
         snapshot_lambda: Optional[lambda_.Function] = None,
@@ -117,7 +118,10 @@ class OpenSearchConstruct(Construct):
             Default is ["127.0.0.1/32"]. 
             Note: leaving this unchanged will raise a warning no one can access your opensearch cluster.
         opensearch_volume_size : int, optional
-            The size, in GB, of the OpenSearch domain's underlying EBS storage. Default is 50GB. 
+            The size, in GB, of the OpenSearch domain's underlying EBS storage. Default is 50GB.
+        tls_security_policy : opensearch.TLSSecurityPolicy, optional
+            TLS security policy for the domain's HTTPS endpoint. Default is `TLS_1_2_PFS`
+            (TLS 1.2-1.3 with perfect forward secrecy cipher suites), AWS's most secure option.
         snapshot_repo_name : str, optional
             Name of the snapshot repository (used by OpenSearch to name the snapshots written to the snapshot bucket).
             Default is "opensearch-snapshot-repo".
@@ -180,6 +184,7 @@ class OpenSearchConstruct(Construct):
             encryption_at_rest=opensearch.EncryptionAtRestOptions(enabled=True),
             # Require https connections
             enforce_https=True,
+            tls_security_policy=tls_security_policy,
             # Use our custom domain name in the endpoint
             # This will autogenerate our CNAME record
             custom_endpoint=opensearch.CustomEndpointOptions(
