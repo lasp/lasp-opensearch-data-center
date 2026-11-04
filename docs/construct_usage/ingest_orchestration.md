@@ -5,21 +5,21 @@ The actual processing code must be supplied in the form of Lambda functions: Dro
 
 ## Components
 
-- Orchestration Queues that pass S3 creation events from the Dropbox Bucket and Ingest Bucket to their respective
-  Lambda functions. These functions are provided with a standard set of environment variables (see `constants.py`).
-- Ingest Status Table which can be used to keep track of ingest status, using the functions provided in 
-  `ingest_status.py` for interacting with DynamoDB (or you can write your own DDB code in your Lambda).
+- Triggers that pass S3 creation events from the Dropbox and Ingest queues (created by `BackendStorageConstruct` and
+  passed in) to their Lambda functions. These functions are provided with a standard set of environment variables
+  (see `constants.py`).
+- Ingest Status Table which can be used to keep track of ingest status. Your Lambda code reads and writes it;
+  `ingest_status.py` does not provide helpers for it yet.
 - Optional backup plan for Ingest Status Table (if backup_vault is provided)
 
 ## Configuring Lambda Environment Variables
 
 The Dropbox and Ingest Lambda functions must be externally defined by the user of this library and passed in to the 
 `IngestProcessingConstruct` as configuration objects. Internally, the construct configures the Lambdas with the correct 
-environment variables, standardized in `constants.py` using the enums `DropboxLambdaEnv` and `IngestLambdaEnv`. 
-However, this configuration is only an update to the Lambda 
-environment. You as the user can pass whatever environment variables you want associated with the Lambda and the 
-`IngestProcessingConstruct` will not overwrite any pre-defined environment variables. It will only add missing 
-variables.
+environment variables, standardized in `constants.py` using the enums `DropboxLambdaEnv` and `IngestLambdaEnv`.
+The construct sets each of these variables on the Lambda, replacing any value of the same name already set on the
+function. To change one, or to add a variable of your own, pass `dropbox_lambda_env` or `ingest_lambda_env`, keyed
+by an enum member or by the variable's name as a string.
 
 # Example Usage in Stack
 
@@ -32,6 +32,7 @@ from aws_cdk import (
     Environment,
     Stack,
     aws_s3 as s3,
+    aws_sqs as sqs,
     aws_opensearchservice as opensearch,
     aws_lambda as lambda_,
     aws_ecr_assets as ecr_assets
@@ -49,6 +50,8 @@ class IngestStack(Stack):
         open_search_domain: opensearch.Domain,
         dropbox_bucket: s3.Bucket,
         ingest_bucket: s3.Bucket,
+        dropbox_queue: sqs.Queue,
+        ingest_queue: sqs.Queue,
         **kwargs
     ):
         super().__init__(scope, construct_id, env=environment, **kwargs)
@@ -86,6 +89,9 @@ class IngestStack(Stack):
             open_search_domain=open_search_domain,
             dropbox_bucket=dropbox_bucket,
             ingest_bucket=ingest_bucket,
+            # BackendStorageConstruct creates both queues, as dropbox_queue and ingest_queue
+            dropbox_queue=dropbox_queue,
+            ingest_queue=ingest_queue,
             dropbox_lambda=self.dropbox_lambda,
             ingest_lambda=self.ingest_lambda
         )

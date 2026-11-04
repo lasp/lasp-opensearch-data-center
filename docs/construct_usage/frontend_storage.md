@@ -36,7 +36,7 @@ class FrontendStorageStack(Stack):
         super().__init__(scope, construct_id, env=environment, **kwargs)
 
         self.frontendStorage = FrontendStorageConstruct(
-            self, construct_id, environment, domain_name=domain_name
+            self, construct_id, environment=environment, domain_name=domain_name
         )
 
         self.frontend_bucket = self.frontendStorage.frontend_bucket
