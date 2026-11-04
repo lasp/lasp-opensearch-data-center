@@ -1,6 +1,6 @@
 {
 	"name": "LASP OpenSearch Data Center Dev Container",
-	"image": "mcr.microsoft.com/devcontainers/python:0-3.11",
+	"image": "mcr.microsoft.com/devcontainers/python:3-3.13",
 	"features": {
 		"ghcr.io/devcontainers/features/node:1": {},
 		"ghcr.io/devcontainers/features/aws-cli:1": {}

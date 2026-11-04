@@ -1,6 +1,10 @@
 # Version Changes
 ## v1.0.9 (unreleased)
 - Added a `tls_security_policy` parameter to `OpenSearchConstruct`, defaulting to `TLS_1_2_PFS` (AWS's most secure TLS policy).
+- Requires Python 3.13 or later (was 3.9), and `aws-cdk-lib` 2.178.0 or later: `IngestProcessingConstruct` uses
+  `dynamodb.PointInTimeRecoverySpecification`, first in 2.178.0, and `OpenSearchConstruct` uses
+  `TLSSecurityPolicy.TLS_1_2_PFS`, first in 2.119.0. The snapshot Lambda's image now uses Python 3.13, and its unused
+  `cloudpathlib` dependency is removed.
 - Fixed OpenSearch snapshots being corrupted by the snapshot bucket's 90-day S3 expiration rule. Snapshots are
   incremental, so expiring objects by age deleted files that current snapshots still depended on. Since v1.0.8
   turned bucket versioning off by default, those deletions were permanent. The rule is removed.

@@ -14,8 +14,9 @@ readme = "README.md"
 include = ["README.md", "CHANGELOG.md", "lambda"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
-aws-cdk-lib = "^2.0.0"
+python = ">=3.13,<4.0"
+# 2.178.0 is the first with dynamodb.PointInTimeRecoverySpecification, which IngestProcessingConstruct uses
+aws-cdk-lib = "^2.178.0"
 constructs = "^10.0.0"
 
 [tool.poetry.group.dev.dependencies]

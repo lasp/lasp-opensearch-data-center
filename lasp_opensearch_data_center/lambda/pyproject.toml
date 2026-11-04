@@ -9,12 +9,11 @@ authors = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
-awslambdaric = "^2.0.4"  # Lambda Runtime Interface Client
+python = "^3.13"
+awslambdaric = "^3.1.1"  # Lambda Runtime Interface Client; 2.x has no Python 3.13 wheel
 opensearch-py = "^2"
 boto3 = "^1"
 psutil = "^5"
-cloudpathlib = "^0.10.0"
 PyYAML = "^6.0"
 requests_aws4auth = "^1.1.2"
 
