@@ -63,6 +63,11 @@ def test_snapshot_retention_is_configurable():
     assert _snapshot_lambda_env(template)["SNAPSHOT_RETENTION_DAYS"] == "30"
 
 
+def test_snapshot_retention_accepts_the_lower_bound():
+    template = Template.from_stack(_stack(snapshot_retention_days=1))
+    assert _snapshot_lambda_env(template)["SNAPSHOT_RETENTION_DAYS"] == "1"
+
+
 def test_snapshot_retention_accepts_the_upper_bound():
     template = Template.from_stack(_stack(snapshot_retention_days=36500))
     assert _snapshot_lambda_env(template)["SNAPSHOT_RETENTION_DAYS"] == "36500"
