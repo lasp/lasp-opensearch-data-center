@@ -13,10 +13,12 @@ the responsibility of the user implementing a CDK application (e.g. a data cente
   It cannot tell who took a snapshot, only how it is named, so give any snapshot you take by hand in the same
   repository a different name. The most recent snapshot it took that the repository reports as successful is
   always kept. It requests at most 20 deletions per run, in one request that OpenSearch queues behind the snapshot
-  just started and that usually completes after the Lambda has finished, so a large backlog takes several days to
-  clear. The run fails, after taking its snapshot, when a deletion it cannot see finish includes a snapshot more than
-  7 days past the retention window, since earlier runs' deletions of it have not finished; a backlog of more than 20
-  expired snapshots fails this way too until it has cleared.
+  just started and that may complete after the Lambda has finished, so a large backlog takes several days to
+  clear. The run fails, after taking its snapshot, when a deletion that was not confirmed includes a snapshot more than
+  7 days past the retention window. That shows deletions that never finish, and it also happens until pruning catches
+  up with older snapshots: on upgrading a repository that has some, after lowering `snapshot_retention_days`, or
+  while more than 20 expired snapshots remain. The construct creates no alarm; alarm on the Lambda's `Errors` metric
+  to hear of a failed run.
 
 # Example Usage in Stack
 

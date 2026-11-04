@@ -43,8 +43,9 @@ LISTING_TIMEOUT_SECONDS = 120
 # the same repository, and the day's snapshot has just been requested, so the deletion normally cannot finish
 # within one invocation. The request is left running on the cluster once this wait is over.
 DELETE_WAIT_SECONDS = 60
-# A deletion that has not answered in time normally finishes on the cluster later the same day. A snapshot still
-# selected this many days after its retention ran out means earlier deletions did not finish, so the run fails.
+# A deletion that has not answered in time is left running on the cluster, and the next run selects again whatever it
+# did not delete. A snapshot still there this many days after its retention ran out fails the run, so that deletions
+# that never finish are noticed.
 OVERDUE_DAYS = 7
 
 # AWS service and credentials to pass to the opensearch python library
@@ -165,16 +166,17 @@ def select_snapshots_to_delete(
 
 
 def raise_if_overdue(overdue: List[str]) -> None:
-    """Fail the run when a deletion that has not answered includes snapshots earlier runs should have deleted
+    """Fail the run when snapshots more than OVERDUE_DAYS past retention may still be in the repository
 
-    Called only when the deletion has not answered, so whether these snapshots are deleted is not yet known.
+    Called only when the deletion did not confirm that it removed them.
     """
     if overdue:
         raise Exception(
-            f"Snapshots {overdue} are more than {OVERDUE_DAYS} days past the retention window and are still in the "
-            "repository, so earlier deletions have not finished. Their deletion has been requested again. Check the "
-            "cluster's pending tasks and snapshot status, or, if the repository had more expired snapshots than "
-            f"{MAX_DELETIONS_PER_RUN}, wait for the backlog to clear."
+            f"Snapshots {overdue} are more than {OVERDUE_DAYS} days past the retention window and were not confirmed "
+            "deleted; their deletion has been requested again. If retention was just set or lowered, or the "
+            f"repository holds more than {MAX_DELETIONS_PER_RUN} expired snapshots, this repeats until pruning has "
+            "caught up. Otherwise earlier deletions are not finishing: check the cluster's pending tasks and the "
+            "snapshot status."
         )
 
 
@@ -193,9 +195,10 @@ def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
     deletion finished first), OpenSearch rejects the whole request. In each case the next run's listing selects
     again whatever was not deleted.
 
-    A deletion left running raises instead of returning when a selected snapshot is more than OVERDUE_DAYS past the
-    retention window, because earlier runs' deletions of it have not finished. A repository with more expired
-    snapshots than MAX_DELETIONS_PER_RUN raises this way too until it has caught up.
+    When the deletion has not answered, or none was deleted (404), the run raises instead of returning if a selected
+    snapshot is more than OVERDUE_DAYS past the retention window. That happens when earlier deletions have not
+    finished, and also, until pruning catches up, when it starts on a repository that already holds snapshots that
+    old: retention newly set or lowered, or more expired snapshots than MAX_DELETIONS_PER_RUN.
 
     Parameters
     ----------
@@ -252,6 +255,7 @@ def prune_expired_snapshots(repo_url: str, retention_days: int) -> List[str]:
             f"A snapshot in {to_delete} no longer exists, so none were deleted; the next run selects them again. "
             f"{response.text}"
         )
+        raise_if_overdue(overdue)
         return []
     if response.status_code != 200:
         raise Exception(f"Deleting snapshots {to_delete} failed: {response.status_code}.{response.text}")

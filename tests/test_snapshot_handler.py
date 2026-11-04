@@ -112,7 +112,7 @@ def test_caps_deletions_per_run(handler_module):
     assert selected == [_name(100 + i) for i in (49, 48, 47, 46, 45)]
 
 
-def _prune(handler_module, listing: dict, delete_result=None):
+def _prune(handler_module, listing: dict, delete_result=None, retention_days: int = 90):
     """Run pruning at NOW against a mocked listing, returning the result and the mocked requests"""
     delete_kwargs = {"side_effect": delete_result} if isinstance(delete_result, Exception) else \
         {"return_value": delete_result or _response()}
@@ -121,7 +121,7 @@ def _prune(handler_module, listing: dict, delete_result=None):
             mock.patch.object(handler_module, "datetime", wraps=datetime) as fake_datetime:
         fake_datetime.now.return_value = NOW
         fake_datetime.strptime = datetime.strptime
-        result = handler_module.prune_expired_snapshots(REPO_URL, 90)
+        result = handler_module.prune_expired_snapshots(REPO_URL, retention_days)
     return result, get, delete
 
 
@@ -175,6 +175,26 @@ def test_prune_raises_when_an_unanswered_deletion_includes_an_overdue_snapshot(h
     assert _name(92) not in str(raised.value)
 
 
+def test_prune_raises_when_an_overdue_snapshot_is_refused_as_missing(handler_module):
+    """A 404 deletes nothing, so an overdue snapshot in the batch is still there."""
+    with pytest.raises(Exception, match=_name(120)):
+        _prune(handler_module, {"snapshots": [_snap(120), _snap(1)]}, _response(status=404))
+
+
+def test_overdue_follows_the_configured_retention(handler_module):
+    """With 30 days' retention, 37.01 days old is overdue and 36 days old is not."""
+    with pytest.raises(Exception, match="past the retention window") as raised:
+        _prune(handler_module, {"snapshots": [_snap(37.01), _snap(36), _snap(1)]}, _response(status=504), 30)
+    assert _name(37.01) in str(raised.value)
+    assert _name(36) not in str(raised.value)
+
+
+def test_selection_follows_the_configured_retention(handler_module):
+    """With 30 days' retention, a 31-day-old snapshot is deleted and a 29-day-old one kept."""
+    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(31), _snap(29), _snap(1)]}, retention_days=30)
+    assert deleted == [_name(31)]
+
+
 def test_prune_does_not_raise_for_an_overdue_snapshot_it_deletes(handler_module):
     """A deletion that answers 200 has removed the snapshot, so there is nothing left to report."""
     deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(120), _snap(1)]})
@@ -196,7 +216,7 @@ def test_prune_raises_when_it_cannot_connect_to_delete(handler_module):
 
 def test_prune_treats_an_already_deleted_snapshot_as_benign(handler_module):
     """Another deletion finishing first makes OpenSearch reject the batch; the next run selects the rest again."""
-    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(100), _snap(1)]}, _response(status=404))
+    deleted, _, _ = _prune(handler_module, {"snapshots": [_snap(92), _snap(1)]}, _response(status=404))
     assert deleted == []
 
 
