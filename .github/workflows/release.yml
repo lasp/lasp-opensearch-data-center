@@ -213,5 +213,9 @@ jobs:
           python-version: '3.13'
       - name: Install mkdocs
         run: pip install mkdocs
-      - name: Build mkdocs
-        run: mkdocs gh-deploy --force
+      - name: Build the docs and push them to gh-pages
+        # Builds on the published gh-pages branch, so the push is a fast-forward. The repository's ruleset refuses
+        # force-pushes on every branch.
+        run: |
+          git fetch --depth 1 origin gh-pages:gh-pages
+          mkdocs gh-deploy
