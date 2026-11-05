@@ -41,7 +41,7 @@ COPY opensearch_data_center_lambda_runtime opensearch_data_center_lambda_runtime
 # We lock all dependencies early so that it can be cached for other builds since dependencies don't change much
 RUN poetry lock
 # Install dependencies
-RUN poetry install --without=dev
+RUN poetry install
 # The entrypoint is a script that automatically figures out if its running in AWS or on a dev machine
 ENTRYPOINT [ "./lambda_entrypoint.sh" ]
 
