@@ -199,6 +199,14 @@ jobs:
   # This job builds the mkdocs and deploys them to github pages
   deploy-mkdocs:
     name: Deploy Mkdocs to Github Pages
+    # Test releases go only to TestPyPI, so they leave the published docs alone
+    if: startsWith(github.ref, 'refs/tags/test-release') == false
+    # One docs deploy at a time, so a second release's push builds on the first's instead of being refused. While one
+    # runs, GitHub keeps only the latest deploy to start waiting and cancels any earlier one waiting, so the site shows
+    # the docs of whichever release's deploy runs last.
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
     needs:
       - build-dist-artifacts
     runs-on: ubuntu-latest
