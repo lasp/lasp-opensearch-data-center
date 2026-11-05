@@ -187,8 +187,11 @@ git tag -a X.Y.Z -m &quot;Version X.Y.Z&quot;
 git push origin X.Y.Z
 </code></pre>
 <h4 id="prereleases">Prereleases</h4>
-<p>Unless the pushed tag matches the regex <code>^[0-9]*\.[0-9]*\.[0-9]*</code>, the release will be marked as a
-prerelease in GitHub. This allows "official" prereleases of suffixed tags, e.g. <code>1.2.3rc4</code></p>
+<p>Unless the pushed tag matches the regex <code>^[0-9]+\.[0-9]+\.[0-9]+$</code> (<code>X.Y.Z</code> with no suffix), the release will be
+marked as a prerelease in GitHub. This allows "official" prereleases of suffixed tags, e.g. <code>1.2.3rc4</code></p>
+<h4 id="tag-and-version">Tag and version</h4>
+<p>The workflow stops before publishing anything unless the tag, without any <code>test-release/</code> prefix, equals the version
+in <code>pyproject.toml</code>. Tag the commit that sets that version.</p>
 <h4 id="release-notes-generation">Release Notes Generation</h4>
 <p>Release notes are generated based on commit messages since the latest non-prerelease Release.</p></div>
             </div>
